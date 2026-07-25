@@ -57,6 +57,11 @@ def _stats(summarize, part: pd.DataFrame) -> dict:
         "trades": int(s["trades"]),
         "wins": wins,
         "losses": losses,
+        # Emitted so the app can compute each trade's share of profit against
+        # the TRUE period total, not just the trades that fit in the capped
+        # list. Otherwise contribution percentages would quietly overstate.
+        "gross_profit": _clean(float(r[r > 0].sum())),
+        "gross_loss": _clean(float(abs(r[r <= 0].sum()))),
         "win_rate": _clean(s.get("win_rate_%")),
         "loss_rate": _clean(round(100 * losses / total, 1)) if total else None,
         "avg": _clean(s.get("avg_ret_%")),

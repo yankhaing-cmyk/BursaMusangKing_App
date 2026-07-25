@@ -114,7 +114,17 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
         return empty
 
     per_strategy, all_r10, trade_rows = [], [], []
+    signal_rows = []        # the per-signal list the Weekly tab renders
     pending = missing = 0   # too recent to score / no price history
+
+    # Company names come from the cached universe pull, same source the scan
+    # uses, so this costs nothing extra on a run.
+    try:
+        from export_scan import _company_names
+        names = _company_names(upstream)
+    except Exception as exc:
+        print(f"company names unavailable ({exc})")
+        names = {}
 
     for strat in sorted(log["strategy"].unique()):
         s = log[log["strategy"] == strat]
@@ -129,11 +139,26 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
                 missing += 1
                 continue
             fr = forward_returns(row["date"], float(row["close"]), df)
+            sym = row["symbol"]
+            rec = {
+                "s": sym,
+                "n": names.get(sym, ""),
+                "st": strat,
+                "d": pd.Timestamp(row["date"]).strftime("%Y-%m-%d"),
+                "px": round(float(row["close"]), 3),
+            }
             if fr.get("_pending"):
                 pending += 1
+                rec["p"] = True
+                signal_rows.append(rec)
                 continue
             if not fr:
                 continue
+            for h in HORIZONS:
+                rec[f"r{h}"] = round(fr[h], 2) if h in fr else None
+            rec["latest"] = round(fr["latest"], 2)
+            rec["p"] = all(rec.get(f"r{h}") is None for h in HORIZONS)
+            signal_rows.append(rec)
             evaluated += 1
             got = False
             for h in HORIZONS:
@@ -199,6 +224,8 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
             equity.append({"date": d, "value": round(running, 2)})
 
     if not per_strategy:
+        empty["signals"] = sorted(signal_rows, key=lambda r: r["d"], reverse=True)[:400]
+        empty["pending"] = pending
         if pending:
             empty["note"] = (
                 f"{pending} signals are logged but none are old enough to "
@@ -220,6 +247,7 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
         "overall": overall,
         "equity_curve": equity,
         "pending": pending,
+        "signals": sorted(signal_rows, key=lambda r: r["d"], reverse=True)[:400],
         "note": "Live signal performance. Past results do not predict future "
                 "results — this is information, not financial advice.",
     }

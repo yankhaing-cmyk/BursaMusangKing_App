@@ -268,10 +268,9 @@
         <p class="l">best ${esc(s.best.symbol)} ${s.best.ret > 0 ? "+" : ""}${s.best.ret}% ·
            worst ${esc(s.worst.symbol)} ${s.worst.ret > 0 ? "+" : ""}${s.worst.ret}%</p>
       </div>`;
-    }).join("") || `<p class="empty">No completed signals yet.<br><br>
-      This fills in once scans have been logging for a few days — it only
-      scores signals flagged NEW, and needs at least 5 trading days after one
-      fires before there is a result to measure.</p>`;
+    }).join("") || `<p class="empty">${esc(weekly.note
+        || "No completed signals yet. Results appear about 5 trading days "
+         + "after a signal fires.")}</p>`;
 
     // The note used to render twice — once as the empty-state text inside
     // #w-strats and again in #w-note. Show it in exactly one place.

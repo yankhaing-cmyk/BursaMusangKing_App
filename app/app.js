@@ -7,7 +7,7 @@
 
   const LABELS = {
     trending: "Trending",
-    early_uptrend: "Early uptrend",
+    early_uptrend: "EarlyUptrend",
     reversal: "Reversal",
     gaining_momentum: "GainMomentum",
   };

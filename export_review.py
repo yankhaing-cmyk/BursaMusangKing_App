@@ -29,7 +29,10 @@ LOOKBACK_WEEKS = 8
 def forward_returns(sig_date, sig_close: float, df: pd.DataFrame) -> dict:
     idx = df.index.searchsorted(pd.Timestamp(sig_date))
     if idx >= len(df):
-        return {}
+        # The signal is stamped later than the last price bar — normal for a
+        # scan run after the close, or on a weekend. There is simply no
+        # forward data yet. Distinguish it from a genuine failure.
+        return {"_pending": True}
     out = {}
     for h in HORIZONS:
         j = idx + h
@@ -111,6 +114,7 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
         return empty
 
     per_strategy, all_r10, trade_rows = [], [], []
+    pending = missing = 0   # too recent to score / no price history
 
     for strat in sorted(log["strategy"].unique()):
         s = log[log["strategy"] == strat]
@@ -122,8 +126,12 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
         for _, row in s.iterrows():
             df = data.get(row["symbol"])
             if df is None or df.empty:
+                missing += 1
                 continue
             fr = forward_returns(row["date"], float(row["close"]), df)
+            if fr.get("_pending"):
+                pending += 1
+                continue
             if not fr:
                 continue
             evaluated += 1
@@ -190,6 +198,19 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
             running *= (1 + float(grp["ret"].mean()) / 100 / len(HORIZONS))
             equity.append({"date": d, "value": round(running, 2)})
 
+    if not per_strategy:
+        if pending:
+            empty["note"] = (
+                f"{pending} signals are logged but none are old enough to "
+                "score yet. Results appear about 5 trading days after a signal "
+                "fires, so this fills in over the coming weeks.")
+        elif missing:
+            empty["note"] = (f"{missing} signals had no usable price history "
+                             "on this run.")
+        _write(empty, publish)
+        print(f"nothing evaluated yet: {pending} pending, {missing} missing history")
+        return empty
+
     report = {
         "generated_at": now.isoformat(),
         "market": config.MARKET,
@@ -198,6 +219,7 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
         "strategies": per_strategy,
         "overall": overall,
         "equity_curve": equity,
+        "pending": pending,
         "note": "Live signal performance. Past results do not predict future "
                 "results — this is information, not financial advice.",
     }
@@ -207,7 +229,8 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
     if send_telegram and per_strategy:
         _send_telegram(eng, report)
 
-    print(f"weekly review: {overall.get('trades', 0)} evaluated trades")
+    print(f"weekly review: {overall.get('trades', 0)} evaluated trades, "
+          f"{pending} still pending")
     return report
 
 

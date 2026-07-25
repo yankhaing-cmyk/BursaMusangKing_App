@@ -6,7 +6,7 @@ name: App Backtest
 # needs recent bars.
 on:
   schedule:
-    - cron: "0 12 * * 6"     # Saturday 12:00 UTC = 20:00 MYT
+    - cron: "0 0 * * 6"     # Saturday 12:00 UTC = 20:00 MYT
   workflow_dispatch:
     inputs:
       top:

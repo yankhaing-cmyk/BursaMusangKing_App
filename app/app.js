@@ -9,7 +9,7 @@
     trending: "Trending",
     early_uptrend: "Early uptrend",
     reversal: "Reversal",
-    gaining_momentum: "Gaining momentum",
+    gaining_momentum: "GainMomentum",
   };
 
   let latest = null, weekly = null, backtest = null;

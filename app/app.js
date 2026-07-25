@@ -345,7 +345,17 @@
   }
   loadAll();
 
+  // Register the shell cache, and reload once when a new worker takes over so
+  // the installed app picks up deploys instead of serving an old shell forever.
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
+    navigator.serviceWorker.register("sw.js")
+      .then((reg) => reg.update().catch(() => {}))
+      .catch(() => {});
   }
 })();

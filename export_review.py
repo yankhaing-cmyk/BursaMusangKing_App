@@ -191,7 +191,7 @@ def _write(report: dict, publish: bool):
     print("wrote public/weekly.json")
     if publish:
         from export_scan import publish_files
-        publish_files()
+        publish_files(only=("weekly",))
 
 
 def _send_telegram(eng, report: dict):

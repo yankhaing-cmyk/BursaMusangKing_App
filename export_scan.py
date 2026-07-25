@@ -211,7 +211,7 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
     return latest
 
 
-def publish_files():
+def publish_files(only: tuple[str, ...] | None = None):
     """POST the JSON blobs to the Cloudflare Worker, which stores them in KV."""
     base = os.environ.get("WORKER_URL", "").rstrip("/")
     token = os.environ.get("PUBLISH_TOKEN", "")
@@ -219,11 +219,12 @@ def publish_files():
         print("publish skipped: WORKER_URL / PUBLISH_TOKEN not set")
         return
     # Tolerate someone pasting a full route into the secret (e.g. .../status)
-    for suffix in ("/status", "/latest", "/weekly", "/history", "/publish"):
+    for suffix in ("/status", "/latest", "/weekly", "/history", "/backtest", "/publish"):
         if base.endswith(suffix):
             base = base[: -len(suffix)]
             print(f"WORKER_URL had '{suffix}' on the end — using {base}")
-    for name in ("latest", "history", "weekly"):
+    keys = only or ("latest", "history", "weekly", "backtest")
+    for name in keys:
         path = OUT / f"{name}.json"
         if not path.exists():
             continue
@@ -232,7 +233,7 @@ def publish_files():
             data=path.read_bytes(),
             headers={"Content-Type": "application/json",
                      "X-Publish-Token": token},
-            timeout=60,
+            timeout=120,
         )
         print(f"publish {name}: {r.status_code} {r.text[:120]}")
 

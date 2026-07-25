@@ -68,21 +68,47 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
     }
 
     if log.empty:
+        empty["note"] = (f"No signals logged yet in {slog.LOG_FILE}. The daily "
+                         "scan writes this file and commits it back to the repo.")
         _write(empty, publish)
-        print("no signals logged yet")
+        print(f"no signals logged yet (looked for {slog.LOG_FILE})")
         return empty
 
+    # Diagnostics first — an empty review is almost always one of these three,
+    # and without them you cannot tell which.
+    total = len(log)
+    n_new_all = int(log["is_new"].sum())
+    print(f"log: {total} rows, {n_new_all} flagged new, "
+          f"dates {log['date'].min().date()} to {log['date'].max().date()}")
+
     cutoff = pd.Timestamp(datetime.now().date()) - timedelta(weeks=LOOKBACK_WEEKS)
-    log = log[(log["date"] >= cutoff) & (log["is_new"] == True)]  # noqa: E712
+    log = log[(log["date"] >= cutoff) & log["is_new"].astype(bool)]
     if log.empty:
+        empty["note"] = (
+            f"{total} signals logged, but none are both flagged NEW and inside "
+            f"the {LOOKBACK_WEEKS}-week window. A repeat of a signal that "
+            "already fired in the last 7 days is not counted again.")
         _write(empty, publish)
-        print("no new signals in review window")
+        print(f"nothing to review: {total} rows, {n_new_all} new, "
+              f"cutoff {cutoff.date()}")
         return empty
 
     symbols = sorted(log["symbol"].unique())
     print(f"reviewing {len(log)} new signals across {len(symbols)} symbols...")
     data = data_fetcher.fetch_many(symbols,
                                    max_workers=config.UNIVERSE["max_workers"])
+
+    # Without this, a failed price fetch produces an empty review that looks
+    # identical to "no signals yet" — the loop below just skips every row.
+    got = sum(1 for v in data.values() if v is not None and not v.empty)
+    print(f"price history OK for {got}/{len(symbols)} symbols")
+    if got == 0:
+        empty["note"] = (f"{len(log)} signals to review, but price history came "
+                         "back empty for every symbol. The data source likely "
+                         "failed on this run — check the log and re-run.")
+        _write(empty, publish)
+        print("aborting: no price data returned")
+        return empty
 
     per_strategy, all_r10, trade_rows = [], [], []
 

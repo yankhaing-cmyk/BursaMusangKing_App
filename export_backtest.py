@@ -45,9 +45,20 @@ def _stats(summarize, part: pd.DataFrame) -> dict:
     s = summarize(part)
     if not s or s.get("trades", 0) == 0:
         return {"trades": 0}
+
+    # Counted here rather than derived from win_rate — rounding a percentage
+    # back into a count drifts by one or two on small samples.
+    r = part["ret_pct"]
+    wins = int((r > 0).sum())
+    losses = int((r <= 0).sum())
+    total = wins + losses
+
     return {
         "trades": int(s["trades"]),
+        "wins": wins,
+        "losses": losses,
         "win_rate": _clean(s.get("win_rate_%")),
+        "loss_rate": _clean(round(100 * losses / total, 1)) if total else None,
         "avg": _clean(s.get("avg_ret_%")),
         "median": _clean(s.get("median_ret_%")),
         "profit_factor": _clean(s.get("profit_factor")),

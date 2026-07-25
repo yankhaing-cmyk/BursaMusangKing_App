@@ -447,6 +447,16 @@
 
     $("tl-title").textContent = `${title} · ${rows.length}`;
 
+    const showCumHead = btKind !== "all" &&
+      ((btKind === "win" && btSort === "best") ||
+       (btKind === "lose" && btSort === "worst"));
+    $("tl-cap").textContent = showCumHead
+      ? (btKind === "win"
+          ? "Right column: this trade's share of total profit, then the running total."
+          : "Right column: this trade's share of total loss, then the running total.")
+      : "";
+    $("tl-cap").style.display = showCumHead ? "" : "none";
+
     $("tl-sort").innerHTML = SORTS.map(([k, l]) =>
       `<button class="sort${k === btSort ? " on" : ""}" data-s="${k}">${l}</button>`).join("");
     $("tl-sort").querySelectorAll(".sort").forEach((b) => {
@@ -478,11 +488,11 @@
           return `
         <div class="tl-row">
           <div class="tl-l1">
-            <span class="sym">${esc(t.s)}</span>
+            <span class="sym">${esc(t.s)} <span class="why">${esc(t.x)}</span></span>
             <span class="ret ${t.r > 0 ? "up" : "down"}">${t.r > 0 ? "+" : ""}${t.r}%</span>
           </div>
           <div class="tl-l2">
-            <span class="dt">${t.in.slice(5)} → ${t.out.slice(5)} · ${t.h}d · ${esc(t.x)}</span>
+            <span class="dt">${fmtDay(t.in)} → ${fmtDay(t.out)} · ${t.h}d</span>
             <span class="con">${conTxt}</span>
           </div>
         </div>`;

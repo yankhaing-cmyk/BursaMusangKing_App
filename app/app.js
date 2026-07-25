@@ -3,6 +3,7 @@
   const CFG = window.BMK_CONFIG || {};
   const API = (CFG.WORKER_URL || "").replace(/\/+$/, "");
   const $ = (id) => document.getElementById(id);
+  const C = window.BMKChart;
 
   const LABELS = {
     trending: "Trending",
@@ -11,9 +12,10 @@
     gaining_momentum: "Gaining momentum",
   };
 
-  let latest = null, weekly = null, historyCache = {};
-  let filter = null, sparks = [], detailChart = null, weeklyChart = null;
-  let pollTimer = null;
+  let latest = null, weekly = null;
+  const historyCache = {};
+  let filter = null, current = null, view = "list";
+  let pollTimer = null, resizeTimer = null;
 
   // ------------------------------------------------------------------ theme
   const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -22,7 +24,7 @@
     $("theme").textContent = mode === "dark" ? "☀" : "◐";
     document.querySelector('meta[name="theme-color"]')
       .setAttribute("content", mode === "dark" ? "#1c1c1a" : "#ffffff");
-    redrawCharts();
+    redraw();
   }
   let theme = localStorage.getItem("bmk-theme") || (media.matches ? "dark" : "light");
   applyTheme(theme);
@@ -37,9 +39,17 @@
     applyTheme(theme);
   });
 
-  function css(name) {
-    return getComputedStyle(document.documentElement)
-      .getPropertyValue(name).trim();
+  // Canvas has no CSS reflow, so anything that changes size or colour needs an
+  // explicit repaint: theme flips, rotation, window resize.
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(redraw, 150);
+  });
+
+  function redraw() {
+    if (view === "list" && latest) drawSparks();
+    if (view === "detail" && current) drawDetail();
+    if (view === "weekly" && weekly) C.line($("w-chart"), weekly.equity_curve || []);
   }
 
   // ----------------------------------------------------------------- banner
@@ -51,21 +61,17 @@
   }
 
   // ------------------------------------------------------------------ fetch
-  // Demo mode: with no real Worker configured, read the sample JSON in ./demo
-  // so you can see the app working before deploying anything.
   const DEMO = !API || API.includes("example.workers.dev");
 
   async function get(path) {
-    let url;
     if (DEMO) {
       const key = path.startsWith("/history") ? "history" : path.slice(1).split("?")[0];
       if (key === "status") {
         const l = await (await fetch("demo/latest.json")).json();
         return { latest: l.generated_at, weekly: null };
       }
-      url = `demo/${key}.json`;
-      const r = await fetch(url, { cache: "no-store" });
-      if (!r.ok) throw new Error(`${url} → ${r.status}`);
+      const r = await fetch(`demo/${key}.json`, { cache: "no-store" });
+      if (!r.ok) throw new Error(`demo/${key}.json → ${r.status}`);
       const data = await r.json();
       const sym = new URLSearchParams(path.split("?")[1] || "").get("symbol");
       if (sym) {
@@ -93,13 +99,12 @@
     try {
       weekly = await get("/weekly");
       renderWeekly();
-    } catch { /* weekly is optional until the first review runs */ }
+    } catch { /* weekly stays empty until the first review runs */ }
   }
 
   function fmtTime(iso) {
     if (!iso) return "–";
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, {
+    return new Date(iso).toLocaleString(undefined, {
       day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
     });
   }
@@ -129,15 +134,17 @@
     });
   }
 
+  function esc(s) {
+    return String(s || "").replace(/[&<>"]/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
   function renderList() {
     const rows = visible();
     const cur = latest.currency || "";
     $("count").textContent =
       `${rows.length} match${rows.length === 1 ? "" : "es"} · ` +
       `${latest.stocks_screened} screened`;
-
-    sparks.forEach((c) => c.destroy());
-    sparks = [];
 
     if (!rows.length) {
       $("list").innerHTML =
@@ -152,7 +159,8 @@
       <div class="row" data-i="${i}">
         <div class="spark"><canvas id="sp${i}"></canvas></div>
         <div class="row-mid">
-          <p class="name">${s.symbol}${s.is_new ? '<span class="badge">NEW</span>' : ""}</p>
+          <p class="name">${esc(s.symbol)}${s.is_new ? '<span class="badge">NEW</span>' : ""}</p>
+          ${s.name ? `<p class="co">${esc(s.name)}</p>` : ""}
           <p class="sub">RSI ${s.rsi} · ADX ${s.adx} · Vol ${s.vol_ratio}x</p>
         </div>
         <div class="row-end">
@@ -162,106 +170,62 @@
       </div>`;
     }).join("");
 
-    rows.forEach((s, i) => {
-      sparks.push(miniChart($(`sp${i}`), s.spark));
-    });
+    drawSparks();
     $("list").querySelectorAll(".row").forEach((r) => {
       r.onclick = () => openDetail(rows[+r.dataset.i]);
     });
   }
 
-  function candleData(bars) {
-    return bars.map((b, i) => ({ x: i, o: b.o, h: b.h, l: b.l, c: b.c }));
-  }
-
-  function miniChart(canvas, bars) {
-    return new Chart(canvas, {
-      type: "candlestick",
-      data: { datasets: [{
-        data: candleData(bars || []),
-        borderWidth: 1,
-        color: { up: css("--up"), down: css("--down"), unchanged: css("--faint") },
-      }] },
-      options: {
-        responsive: true, maintainAspectRatio: false, animation: false,
-        scales: { x: { display: false }, y: { display: false } },
-        plugins: { legend: { display: false }, tooltip: { enabled: false } },
-      },
+  function drawSparks() {
+    visible().forEach((s, i) => {
+      const el = $("sp" + i);
+      if (el) C.sparkline(el, s.spark);
     });
   }
 
   // ----------------------------------------------------------------- detail
   async function openDetail(s) {
+    current = s;
     show("detail");
-    $("title").textContent = s.symbol;
-    $("d-name").textContent = s.symbol;
-    $("d-sub").textContent =
-      `${LABELS[s.strategy] || s.strategy} · 3 month daily candles`;
-    $("d-rsi").textContent = s.rsi;
-    $("d-adx").textContent = s.adx;
-    $("d-ema").textContent = s.ema20 ?? "–";
-    $("d-vol").textContent = s.vol_ratio + "x";
     const cur = latest.currency || "";
+    const cat = (LABELS[s.strategy] || s.strategy).toUpperCase();
+
+    $("d-title").innerHTML =
+      `${esc(s.symbol)}<span class="sep">|</span>` +
+      `<span class="cat">${esc(cat)}</span><span class="sep">|</span>` +
+      `<span class="stat">${cur}${s.close}</span>` +
+      `<span class="stat">RSI ${s.rsi}</span>` +
+      `<span class="stat">ADX ${s.adx}</span>` +
+      `<span class="stat">Vol ${s.vol_ratio}x</span>` +
+      `<span class="stat">ROC10 ${s.roc10}%</span>`;
+    $("d-co").textContent = s.name || "";
+    $("title").textContent = s.symbol;
     $("d-entry").textContent = s.entry != null ? `${cur} ${s.entry}` : "–";
     $("d-stop").textContent = s.stop != null ? `${cur} ${s.stop}` : "–";
 
-    let bars = historyCache[s.symbol];
-    if (!bars) {
+    if (!historyCache[s.symbol]) {
       try {
         const r = await get("/history?symbol=" + encodeURIComponent(s.symbol));
-        bars = r.series;
-        historyCache[s.symbol] = bars;
+        historyCache[s.symbol] = r.series;
       } catch {
-        bars = s.spark;  // fall back to the 20-bar sparkline data
+        historyCache[s.symbol] = null;
       }
     }
-    drawDetail(bars, s);
+    if (current === s) drawDetail();
   }
 
-  function drawDetail(bars, s) {
-    if (detailChart) detailChart.destroy();
-    const sets = [{
-      type: "candlestick",
-      data: candleData(bars),
-      color: { up: css("--up"), down: css("--down"), unchanged: css("--faint") },
-    }];
-
-    const lines = {
-      id: "levels",
-      afterDatasetsDraw(chart) {
-        if (!s || s.entry == null) return;
-        const { ctx, chartArea, scales } = chart;
-        [[s.entry, css("--up")], [s.stop, css("--down")]].forEach(([v, col]) => {
-          const y = scales.y.getPixelForValue(v);
-          if (y < chartArea.top || y > chartArea.bottom) return;
-          ctx.save();
-          ctx.setLineDash([4, 4]);
-          ctx.strokeStyle = col;
-          ctx.beginPath();
-          ctx.moveTo(chartArea.left, y);
-          ctx.lineTo(chartArea.right, y);
-          ctx.stroke();
-          ctx.restore();
-        });
-      },
-    };
-
-    detailChart = new Chart($("d-chart"), {
-      data: { datasets: sets },
-      options: {
-        responsive: true, maintainAspectRatio: false, animation: false,
-        scales: {
-          x: { display: false },
-          y: { grid: { color: css("--line") },
-               ticks: { color: css("--faint"), font: { size: 10 } } },
-        },
-        plugins: { legend: { display: false } },
-      },
-      plugins: [lines],
-    });
+  function drawDetail() {
+    const s = historyCache[current.symbol];
+    if (s) {
+      C.detail($("d-chart"), s);
+    } else {
+      // No 3-month history for this symbol — fall back to the 20-bar thumbnail
+      // data so the screen still shows something rather than an empty box.
+      C.detail($("d-chart"), Object.assign({ t: [], v: [] }, current.spark));
+    }
   }
 
-  $("back").onclick = () => show("list");
+  $("back").onclick = () => { current = null; show("list"); };
 
   // ----------------------------------------------------------------- weekly
   function renderWeekly() {
@@ -280,7 +244,6 @@
 
     $("w-curve-label").textContent =
       `Cumulative signal performance · last ${weekly.lookback_weeks} weeks`;
-    drawWeeklyChart();
 
     $("w-strats").innerHTML = (weekly.strategies || []).map((s) => {
       const h = s.horizons || {};
@@ -291,60 +254,34 @@
       return `<div class="strat-block">
         <h3>${LABELS[s.strategy] || s.strategy} — ${s.signals} new signals</h3>
         ${parts.map((p) => `<p class="l">${p}</p>`).join("")}
-        <p class="l">best ${s.best.symbol} ${s.best.ret > 0 ? "+" : ""}${s.best.ret}% ·
-           worst ${s.worst.symbol} ${s.worst.ret > 0 ? "+" : ""}${s.worst.ret}%</p>
+        <p class="l">best ${esc(s.best.symbol)} ${s.best.ret > 0 ? "+" : ""}${s.best.ret}% ·
+           worst ${esc(s.worst.symbol)} ${s.worst.ret > 0 ? "+" : ""}${s.worst.ret}%</p>
       </div>`;
-    }).join("") || `<p class="empty">${weekly.note || "No review data yet."}</p>`;
+    }).join("") || `<p class="empty">${esc(weekly.note || "No review data yet.")}</p>`;
 
     $("w-note").textContent = weekly.note || "";
-  }
-
-  function drawWeeklyChart() {
-    if (weeklyChart) weeklyChart.destroy();
-    const pts = (weekly && weekly.equity_curve) || [];
-    weeklyChart = new Chart($("w-chart"), {
-      type: "line",
-      data: {
-        labels: pts.map((p) => p.date.slice(5)),
-        datasets: [{
-          data: pts.map((p) => p.value),
-          borderColor: css("--accent"), borderWidth: 2,
-          pointRadius: 0, tension: .3, fill: false,
-        }],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false, animation: false,
-        scales: {
-          x: { grid: { display: false },
-               ticks: { color: css("--faint"), font: { size: 10 }, maxTicksLimit: 6 } },
-          y: { grid: { color: css("--line") },
-               ticks: { color: css("--faint"), font: { size: 10 } } },
-        },
-        plugins: { legend: { display: false } },
-      },
-    });
-  }
-
-  function redrawCharts() {
-    if (latest) renderList();
-    if (weekly) drawWeeklyChart();
+    if (view === "weekly") C.line($("w-chart"), weekly.equity_curve || []);
   }
 
   // ------------------------------------------------------------------- nav
-  function show(view) {
-    ["list", "detail", "weekly"].forEach((v) => {
-      $("view-" + v).hidden = v !== view;
+  function show(v) {
+    view = v;
+    ["list", "detail", "weekly"].forEach((x) => {
+      $("view-" + x).hidden = x !== v;
     });
     document.querySelectorAll("nav button").forEach((b) => {
-      b.classList.toggle("on", b.dataset.view === view ||
-        (view === "detail" && b.dataset.view === "list"));
+      b.classList.toggle("on", b.dataset.view === v ||
+        (v === "detail" && b.dataset.view === "list"));
     });
-    $("title").textContent =
-      view === "weekly" ? "Weekly review" : "BursaMusangKing";
+    if (v !== "detail") {
+      $("title").textContent = v === "weekly" ? "Weekly review" : "BursaMusangKing";
+    }
     window.scrollTo(0, 0);
+    // Canvases in a hidden section have zero width, so draw after they're shown.
+    requestAnimationFrame(redraw);
   }
   document.querySelectorAll("nav button").forEach((b) => {
-    b.onclick = () => show(b.dataset.view);
+    b.onclick = () => { current = null; show(b.dataset.view); };
   });
 
   // ------------------------------------------------------------- run a scan
@@ -382,6 +319,7 @@
       try {
         const st = await get("/status");
         if (st.latest && st.latest !== before) {
+          Object.keys(historyCache).forEach((k) => delete historyCache[k]);
           await loadAll();
           banner("Scan complete — all screeners updated.");
           setTimeout(() => banner(null), 4000);
@@ -392,7 +330,7 @@
 
       if (Date.now() > deadline) {
         banner("Scan is taking longer than usual. It's still running on "
-             + "GitHub — pull down to refresh in a few minutes.", "err");
+             + "GitHub — reload in a few minutes.", "err");
         $("run").disabled = false;
         return;
       }

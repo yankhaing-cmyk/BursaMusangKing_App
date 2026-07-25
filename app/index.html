@@ -28,7 +28,8 @@ header{position:sticky;top:0;z-index:10;background:var(--card);
   border-bottom:.5px solid var(--line);padding:14px 16px 10px;
   padding-top:calc(14px + env(safe-area-inset-top));
   display:flex;align-items:center;justify-content:space-between;gap:10px}
-header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
+header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon-btn{background:none;border:0;color:var(--muted);font-size:19px;cursor:pointer;
   padding:4px;line-height:1}
 main{flex:1;padding:12px 16px 0;overflow-x:hidden}
@@ -41,9 +42,12 @@ main{flex:1;padding:12px 16px 0;overflow-x:hidden}
 .row{display:flex;align-items:center;gap:10px;padding:9px 0;
   border-bottom:.5px solid var(--line);cursor:pointer}
 .row:last-child{border-bottom:0}
-.spark{width:58px;height:34px;flex:0 0 auto;position:relative}
+.spark{width:58px;height:34px;flex:0 0 auto}
+.spark canvas{width:100%;height:100%;display:block}
 .row-mid{flex:1;min-width:0}
 .row-mid .name{margin:0;font-size:13.5px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-mid .co{margin:0;font-size:11px;color:var(--faint);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row-mid .sub{margin:0;font-size:11.5px;color:var(--muted)}
 .row-end{text-align:right;flex:0 0 auto}
@@ -75,14 +79,16 @@ main{flex:1;padding:12px 16px 0;overflow-x:hidden}
 .primary:active{transform:scale(.985)}
 .primary:disabled{opacity:.55;cursor:default}
 
-.detail-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.detail-head h2{margin:0;font-size:15px;font-weight:600}
-.detail-head p{margin:0;font-size:12px;color:var(--muted)}
-.big-chart{position:relative;height:260px;margin-bottom:14px}
-.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;
-  margin-bottom:14px}
-.stats div p:first-child{margin:0;font-size:11px;color:var(--muted)}
-.stats div p:last-child{margin:0;font-size:15px;font-weight:600}
+.detail-head{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
+.d-title{margin:0;font-size:13px;font-weight:700;line-height:1.5;
+  letter-spacing:-.01em}
+.d-title .sep{color:var(--faint);font-weight:400;margin:0 5px}
+.d-title .cat{color:var(--accent)}
+.d-title .stat{font-weight:600;color:var(--muted);font-size:12px;
+  margin-right:9px;white-space:nowrap}
+.d-co{margin:2px 0 0;font-size:12px;color:var(--faint)}
+.chart-wrap{position:relative;margin:4px -6px 12px}
+.chart-wrap canvas{width:100%;display:block}
 .panel{background:var(--bg);border-radius:var(--radius);padding:11px 13px;
   margin-bottom:14px}
 .panel .h{margin:0 0 7px;font-size:12px;color:var(--muted)}
@@ -133,16 +139,13 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
     <!-- ============ detail view ============ -->
     <section id="view-detail" hidden>
       <div class="detail-head">
-        <button class="icon-btn" id="back" aria-label="Back">←</button>
-        <div><h2 id="d-name"></h2><p id="d-sub">3 month daily candles</p></div>
+        <button class="icon-btn" id="back" aria-label="Back" style="margin-left:-4px">←</button>
+        <div style="flex:1;min-width:0">
+          <p class="d-title" id="d-title"></p>
+          <p class="d-co" id="d-co"></p>
+        </div>
       </div>
-      <div class="big-chart"><canvas id="d-chart"></canvas></div>
-      <div class="stats">
-        <div><p>RSI</p><p id="d-rsi">–</p></div>
-        <div><p>ADX</p><p id="d-adx">–</p></div>
-        <div><p>EMA20</p><p id="d-ema">–</p></div>
-        <div><p>Vol</p><p id="d-vol">–</p></div>
-      </div>
+      <div class="chart-wrap"><canvas id="d-chart"></canvas></div>
       <div class="panel">
         <p class="h">Suggested levels</p>
         <div class="kv"><span style="color:var(--muted)">Entry</span><b id="d-entry">–</b></div>
@@ -156,8 +159,8 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
     <section id="view-weekly" hidden>
       <div class="cards" id="w-cards"></div>
       <p class="meta" id="w-curve-label">Equity curve</p>
-      <div style="position:relative;height:150px;margin-bottom:6px">
-        <canvas id="w-chart"></canvas>
+      <div class="chart-wrap" style="margin-bottom:6px">
+        <canvas id="w-chart" style="height:150px"></canvas>
       </div>
       <div id="w-strats"></div>
       <p class="disclaimer" id="w-note"></p>
@@ -176,9 +179,8 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
   </nav>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-chart-financial/0.2.1/chartjs-chart-financial.min.js"></script>
 <script src="config.js"></script>
+<script src="charts.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

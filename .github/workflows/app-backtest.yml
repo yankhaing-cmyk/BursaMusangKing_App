@@ -1,0 +1,56 @@
+name: App Backtest
+
+# Replays every strategy over history and publishes train/test stats plus the
+# trade list. Scheduled weekly rather than daily because it's the slow path —
+# it downloads full history for the whole sample, where the daily scan only
+# needs recent bars.
+on:
+  schedule:
+    - cron: "0 12 * * 6"     # Saturday 12:00 UTC = 20:00 MYT
+  workflow_dispatch:
+    inputs:
+      top:
+        description: "Backtest the N most liquid stocks (0 = entire market, very slow)"
+        required: false
+        default: "300"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-backtest
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330       # a full-market run can take hours
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install --upgrade git+https://github.com/rongardF/tvdatafeed.git
+
+      - name: Run backtest and publish
+        env:
+          MARKET: ${{ vars.MARKET || 'MYX' }}
+          UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO || 'yankhaing-cmyk/BursaMusangKing' }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+        run: python export_backtest.py --top ${{ github.event.inputs.top || '300' }} --publish
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-json
+          path: public/backtest.json
+          if-no-files-found: ignore
+          retention-days: 30

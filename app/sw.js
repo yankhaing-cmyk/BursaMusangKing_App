@@ -1,16 +1,20 @@
-/* Service worker — shell caching for the installed app.
+/* Service worker — offline fallback for the installed app.
  *
- * Three rules learned the hard way:
- *   1. Never let respondWith() reject. A rejected promise on a navigation is
- *      what the browser reports as ERR_FAILED, and in a standalone PWA that
- *      is a blank unusable window rather than a normal error page.
- *   2. Network first for navigations, cache only as a fallback, so a bad or
- *      stale cached shell can never brick the installed app.
- *   3. cache.addAll() is atomic — one 404 (a file not deployed yet) fails the
- *      whole install and leaves the PREVIOUS worker in charge. Add files
- *      individually and tolerate misses.
+ * Network-first for everything, cache purely as an offline fallback.
+ *
+ * The previous version was cache-first for shell files, which meant a deployed
+ * change to app.js was invisible until the CACHE constant below happened to be
+ * bumped — forget that once and the installed app is frozen on old code with
+ * no obvious symptom. Serving from the network first costs a few hundred
+ * milliseconds on open and removes that entire failure mode.
+ *
+ * Other rules kept from before:
+ *   - respondWith() must never reject; a rejected navigation is ERR_FAILED,
+ *     which in a standalone PWA is a blank unusable window.
+ *   - cache.addAll() is atomic, so one not-yet-deployed file fails the whole
+ *     install and leaves the previous worker in charge. Add individually.
  */
-const CACHE = "bmk-shell-v4";
+const CACHE = "bmk-shell-v5";
 const SHELL = ["./", "./index.html", "./app.js", "./charts.js", "./config.js",
                "./manifest.json"];
 
@@ -46,32 +50,28 @@ self.addEventListener("fetch", (event) => {
   // Leave the Worker API (different origin) completely alone.
   if (url.origin !== self.location.origin) return;
 
-  // Navigations: always try the network, fall back to the cached shell, and
-  // as a last resort return a readable message instead of failing.
-  if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req)
-        .catch(() => caches.match("./index.html")
-          .then((hit) => hit || caches.match("./")))
-        .then((res) => res || new Response(
-          "<h1>Offline</h1><p>Reconnect and reopen the app.</p>",
-          { headers: { "Content-Type": "text/html" }, status: 200 }))
-    );
-    return;
-  }
-
-  // Scan data must never come from cache — stale results are worse than none.
+  // Scan data is never cached — stale results are worse than no results.
   if (/\/(latest|history|weekly|backtest|status)\.json$/.test(url.pathname)) return;
 
   event.respondWith(
-    caches.match(req)
-      .then((hit) => hit || fetch(req).then((res) => {
+    fetch(req)
+      .then((res) => {
         if (res && res.ok && res.type === "basic") {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         }
         return res;
+      })
+      .catch(() => caches.match(req).then((hit) => {
+        if (hit) return hit;
+        if (req.mode === "navigate") {
+          return caches.match("./index.html")
+            .then((h) => h || caches.match("./"))
+            .then((h) => h || new Response(
+              "<h1>Offline</h1><p>Reconnect and reopen the app.</p>",
+              { headers: { "Content-Type": "text/html" }, status: 200 }));
+        }
+        return Response.error();
       }))
-      .catch(() => caches.match(req).then((hit) => hit || Response.error()))
   );
 });

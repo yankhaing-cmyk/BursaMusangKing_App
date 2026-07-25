@@ -298,5 +298,69 @@
     }
   }
 
-  window.BMKChart = { sparkline, detail, line };
+  // ------------------------------------------------- split train/test line
+  /** Two segments on one shared scale: train dashed grey, test solid accent.
+   *  Same scale matters — drawing them independently would hide the fact that
+   *  the test half is flatter, which is the whole point of looking. */
+  function split(canvas, train, test) {
+    const pts = [...(train || []), ...(test || [])];
+    if (pts.length < 2) { prep(canvas); return; }
+    const { ctx, w, h } = prep(canvas);
+    const grid = css("--line"), label = css("--faint"), accent = css("--accent");
+    const padL = 40, padR = 8, padT = 8, padB = 18;
+    const vals = pts.map((p) => p.v);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    if (hi === lo) { hi += 1; lo -= 1; }
+    const sp = hi - lo;
+    lo -= sp * 0.08; hi += sp * 0.08;
+    const plotW = w - padL - padR, plotH = h - padT - padB;
+    const xAt = (i) => padL + (i / (pts.length - 1)) * plotW;
+    const yAt = (v) => padT + (hi - v) / (hi - lo) * plotH;
+
+    ctx.font = "10px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.textBaseline = "middle";
+    ticks(lo, hi, 4).forEach((t) => {
+      const y = yAt(t);
+      if (y < padT - 1 || y > padT + plotH + 1) return;
+      ctx.strokeStyle = grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(w - padR, y);
+      ctx.stroke();
+      ctx.fillStyle = label;
+      ctx.textAlign = "right";
+      ctx.fillText(t.toFixed(0), padL - 5, y);
+    });
+
+    const nTrain = (train || []).length;
+    if (nTrain > 1) {
+      polyline(ctx, vals.map((v, i) => (i < nTrain ? v : null)),
+        xAt, yAt, label, 2, [5, 3]);
+    }
+    if ((test || []).length) {
+      // start one point early so the two segments visibly join
+      polyline(ctx, vals.map((v, i) => (i >= nTrain - 1 ? v : null)),
+        xAt, yAt, accent, 2);
+      const x = xAt(Math.max(0, nTrain - 1));
+      ctx.save();
+      ctx.strokeStyle = grid;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, padT);
+      ctx.lineTo(x, padT + plotH);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.fillStyle = label;
+    ctx.textBaseline = "top";
+    [0, pts.length - 1].forEach((i, k) => {
+      ctx.textAlign = k === 0 ? "left" : "right";
+      ctx.fillText(fmtDate(pts[i].d), xAt(i), padT + plotH + 5);
+    });
+  }
+
+  window.BMKChart = { sparkline, detail, line, split };
 })();

@@ -12,7 +12,8 @@
     gaining_momentum: "Gaining momentum",
   };
 
-  let latest = null, weekly = null;
+  let latest = null, weekly = null, backtest = null;
+  let btStrat = null, btOpen = null;
   const historyCache = {};
   let filter = null, current = null, view = "list";
   let pollTimer = null, resizeTimer = null;
@@ -50,6 +51,7 @@
     if (view === "list" && latest) drawSparks();
     if (view === "detail" && current) drawDetail();
     if (view === "weekly" && weekly) C.line($("w-chart"), weekly.equity_curve || []);
+    if (view === "backtest" && backtest) drawBtChart();
   }
 
   // ----------------------------------------------------------------- banner
@@ -100,6 +102,12 @@
       weekly = await get("/weekly");
       renderWeekly();
     } catch { /* weekly stays empty until the first review runs */ }
+    try {
+      backtest = await get("/backtest");
+      renderBacktest();
+    } catch {
+      $("bt-meta").textContent = "No backtest yet — run the App Backtest workflow.";
+    }
   }
 
   function fmtTime(iso) {
@@ -263,10 +271,150 @@
     if (view === "weekly") C.line($("w-chart"), weekly.equity_curve || []);
   }
 
+  // --------------------------------------------------------------- backtest
+  const LEVEL_ICON = { good: "✓", warn: "!", bad: "✕", thin: "·" };
+
+  function btCurrent() {
+    if (!backtest) return null;
+    const list = backtest.strategies || [];
+    if (!btStrat) {
+      // default to the strategy with the most test trades, not just the first —
+      // a strategy with 3 trades tells you nothing and shouldn't open by default
+      const best = list.reduce((a, b) =>
+        ((b.test || {}).trades || 0) > ((a.test || {}).trades || 0) ? b : a, list[0]);
+      btStrat = best && best.strategy;
+    }
+    return list.find((x) => x.strategy === btStrat) || list[0] || null;
+  }
+
+  function renderBacktest() {
+    if (!backtest) return;
+    const cur = btCurrent();
+    $("bt-meta").textContent =
+      `${backtest.universe_size} stocks · ${backtest.date_from || "?"} – ${backtest.date_to || "?"}` +
+      (cur ? ` · ${cur.trades_total || 0} trades` : "");
+
+    $("bt-chips").innerHTML = (backtest.strategies || []).map((s) => `
+      <button class="chip${s.strategy === btStrat ? " on" : ""}" data-s="${s.strategy}">
+        ${LABELS[s.strategy] || s.strategy}<span class="n">${(s.test || {}).trades || 0}</span>
+      </button>`).join("");
+    $("bt-chips").querySelectorAll(".chip").forEach((c) => {
+      c.onclick = () => {
+        btStrat = c.dataset.s; btOpen = null;
+        closeTrades(); renderBacktest();
+      };
+    });
+
+    if (!cur) return;
+    const v = cur.verdict || {};
+    $("bt-verdict").innerHTML = v.text
+      ? `<div class="verdict v-${v.level || "thin"}"><span>${LEVEL_ICON[v.level] || "·"}</span><span>${esc(v.text)}</span></div>`
+      : "";
+
+    const tr = cur.train || {}, te = cur.test || {};
+    const pct = (x) => (x == null ? "–" : x + "%");
+    const num = (x) => (x == null ? "–" : x);
+    const rows = [
+      { k: "win", l: "Win rate", tr: pct(tr.win_rate), te: pct(te.win_rate), tap: 1 },
+      { k: null, l: "Profit factor", tr: num(tr.profit_factor), te: num(te.profit_factor) },
+      { k: "all", l: "Avg return", tr: pct(tr.avg), te: pct(te.avg), tap: 1 },
+      { k: "lose", l: "Worst trade", tr: pct(tr.worst), te: pct(te.worst), tap: 1 },
+      { k: "all", l: "Trades", tr: num(tr.trades), te: num(te.trades), tap: 1 },
+    ];
+
+    $("bt-rows").innerHTML = rows.map((r, i) => `
+      <div class="bt-row">
+        <span>${r.l}</span><span class="tr">${r.tr}</span>
+        ${r.tap
+          ? `<span class="te tap" data-k="${r.k}" data-i="${i}" role="button" tabindex="0">${r.te} ›</span>`
+          : `<span class="te">${r.te}</span>`}
+      </div>`).join("");
+
+    $("bt-rows").querySelectorAll(".tap").forEach((t) => {
+      const go = () => (btOpen === t.dataset.i ? closeTrades() : openTrades(t.dataset.k, t.dataset.i));
+      t.onclick = go;
+      t.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+      };
+    });
+
+    const mdd = cur.max_drawdown;
+    const card = (l, val) => `<div class="c"><p>${l}</p><p>${val}</p></div>`;
+    $("bt-cards").innerHTML =
+      card("Max drawdown", mdd == null ? "–" : mdd + "%") +
+      card("Avg hold", te.avg_hold == null ? "–" : te.avg_hold + "d") +
+      card("Best trade", te.best == null ? "–" : "+" + te.best + "%") +
+      card("Median", te.median == null ? "–" : te.median + "%");
+
+    const cfg = (backtest.strategy_config || {})[cur.strategy] || {};
+    const p = backtest.params || {};
+    $("bt-cfg").textContent =
+      Object.entries(cfg).map(([k, x]) => `${k} ${x}`).join(" · ") +
+      (Object.keys(p).length
+        ? "\n" + Object.entries(p).map(([k, x]) => `${k} ${x}`).join(" · ")
+        : "");
+
+    $("bt-updated").textContent = "Last run " + fmtTime(backtest.generated_at);
+    $("bt-note").textContent = backtest.note || "";
+    requestAnimationFrame(drawBtChart);
+  }
+
+  function drawBtChart() {
+    const cur = btCurrent();
+    if (!cur) return;
+    const eq = cur.equity || {};
+    C.split($("bt-chart"), eq.train || [], eq.test || []);
+  }
+
+  function openTrades(kind, idx) {
+    const cur = btCurrent();
+    if (!cur) return;
+    // Only test trades are offered — train trades are the in-sample half the
+    // strategy was tuned against, so inspecting them tells you nothing useful.
+    let rows = (cur.trades || []).filter((t) => t.p === "test");
+    let title = "All test trades";
+    if (kind === "win") { rows = rows.filter((t) => t.r > 0); title = "Winning trades"; }
+    if (kind === "lose") {
+      rows = rows.filter((t) => t.r <= 0).sort((a, b) => a.r - b.r);
+      title = "Losing trades, worst first";
+    }
+
+    $("tl-title").textContent = `${title} · ${rows.length}`;
+    $("tl-rows").innerHTML = rows.length
+      ? rows.map((t) => `
+        <div class="tl-row">
+          <span class="sym">${esc(t.s)}</span>
+          <span class="dt">${t.in.slice(5)} → ${t.out.slice(5)}</span>
+          <span class="ret ${t.r > 0 ? "up" : "down"}">${t.r > 0 ? "+" : ""}${t.r}%</span>
+        </div>`).join("")
+      : `<p class="empty">No trades in this bucket.</p>`;
+
+    const capped = (cur.test || {}).trades > rows.length && kind === "all";
+    $("tl-note").textContent = capped
+      ? `Showing ${rows.length} most recent of ${(cur.test || {}).trades}`
+      : `${rows.length} trade${rows.length === 1 ? "" : "s"}`;
+
+    const panel = $("bt-panel");
+    panel.style.transition = "height .2s ease";
+    panel.style.height = $("bt-panel-in").offsetHeight + "px";
+    btOpen = idx;
+    $("bt-rows").querySelectorAll(".tap").forEach((t) =>
+      t.classList.toggle("on", t.dataset.i === idx));
+  }
+
+  function closeTrades() {
+    const panel = $("bt-panel");
+    if (panel) panel.style.height = "0px";
+    btOpen = null;
+    const r = $("bt-rows");
+    if (r) r.querySelectorAll(".tap").forEach((t) => t.classList.remove("on"));
+  }
+  $("tl-close").onclick = closeTrades;
+
   // ------------------------------------------------------------------- nav
   function show(v) {
     view = v;
-    ["list", "detail", "weekly"].forEach((x) => {
+    ["list", "detail", "weekly", "backtest"].forEach((x) => {
       $("view-" + x).hidden = x !== v;
     });
     document.querySelectorAll("nav button").forEach((b) => {
@@ -274,7 +422,10 @@
         (v === "detail" && b.dataset.view === "list"));
     });
     if (v !== "detail") {
-      $("title").textContent = v === "weekly" ? "Weekly review" : "BursaMusangKing";
+      $("title").textContent =
+        v === "weekly" ? "Weekly review"
+        : v === "backtest" ? "Backtest"
+        : "BursaMusangKing";
     }
     window.scrollTo(0, 0);
     // Canvases in a hidden section have zero width, so draw after they're shown.

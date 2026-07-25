@@ -10,7 +10,7 @@
  *      whole install and leaves the PREVIOUS worker in charge. Add files
  *      individually and tolerate misses.
  */
-const CACHE = "bmk-shell-v3";
+const CACHE = "bmk-shell-v4";
 const SHELL = ["./", "./index.html", "./app.js", "./charts.js", "./config.js",
                "./manifest.json"];
 
@@ -61,7 +61,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Scan data must never come from cache — stale results are worse than none.
-  if (/\/(latest|history|weekly|status)\.json$/.test(url.pathname)) return;
+  if (/\/(latest|history|weekly|backtest|status)\.json$/.test(url.pathname)) return;
 
   event.respondWith(
     caches.match(req)

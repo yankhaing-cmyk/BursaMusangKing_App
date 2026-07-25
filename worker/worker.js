@@ -10,6 +10,7 @@
  *   GET  /history             -> 3-month OHLC for every matched symbol
  *   GET  /history?symbol=XYZ  -> just that symbol's series
  *   GET  /weekly              -> weekly review stats
+ *   GET  /backtest            -> train/test stats + trade list per strategy
  *   GET  /status              -> generated_at timestamps, for polling
  *   POST /run                 -> workflow_dispatch on the app repo
  *   POST /publish?key=latest  -> store JSON in KV (CI only, token-gated)
@@ -20,7 +21,7 @@
  *   Vars         : GITHUB_REPO, WORKFLOW_FILE, ALLOWED_ORIGIN
  */
 
-const JSON_KEYS = new Set(["latest", "history", "weekly"]);
+const JSON_KEYS = new Set(["latest", "history", "weekly", "backtest"]);
 
 function cors(env) {
   return {
@@ -52,7 +53,8 @@ export default {
     }
 
     // ---------------------------------------------------------- read routes
-    if (request.method === "GET" && (path === "/latest" || path === "/weekly")) {
+    if (request.method === "GET" &&
+        (path === "/latest" || path === "/weekly" || path === "/backtest")) {
       const key = path.slice(1);
       const body = await readKV(env, key);
       if (!body) return json({ error: "no data yet", key }, env, 404);
@@ -81,7 +83,7 @@ export default {
 
     if (request.method === "GET" && path === "/status") {
       const out = {};
-      for (const key of ["latest", "weekly"]) {
+      for (const key of ["latest", "weekly", "backtest"]) {
         const body = await readKV(env, key);
         try {
           out[key] = body ? JSON.parse(body).generated_at : null;

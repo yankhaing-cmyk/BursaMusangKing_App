@@ -1,16 +1,18 @@
 name: App Scan
 
+# Runs the scan, writes JSON, pushes it to the Worker, commits the signal log.
+# workflow_dispatch is what the app's "Run scan now" button triggers.
 on:
   schedule:
-    - cron: "20 9 * * 1-5"
+    - cron: "20 9 * * 1-5"   # 09:20 UTC = 17:20 MYT, just after Bursa close
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write            # needed to commit the app signal log
 
 concurrency:
   group: app-scan
-  cancel-in-progress: false
+  cancel-in-progress: false  # let a running scan finish rather than truncating it
 
 jobs:
   scan:
@@ -18,6 +20,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # full history so the rebase below can work
 
       - uses: actions/setup-python@v5
         with:
@@ -35,15 +39,40 @@ jobs:
           UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO || 'yankhaing-cmyk/BursaMusangKing' }}
           WORKER_URL: ${{ secrets.WORKER_URL }}
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          # Leave SEND_TELEGRAM unset (or "0") while your original repo is still
+          # alerting you, otherwise you'll get every alert twice.
           SEND_TELEGRAM: ${{ vars.SEND_TELEGRAM || '0' }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python export_scan.py --publish
 
+      # A scan takes minutes, so the branch can move on while it runs (an edit
+      # to config.js, an earlier run finishing). Rebase our commit on top of
+      # whatever landed, and retry in case something lands again mid-push.
       - name: Commit signal log
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add app_signals_*.csv
-          git diff --staged --quiet || git commit -m "signals: $(date -u +%Y-%m-%d)"
-          git push
+
+          if git diff --staged --quiet; then
+            echo "No signal-log changes to commit."
+            exit 0
+          fi
+
+          git commit -m "signals: $(date -u +%Y-%m-%d)"
+
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+               && git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Pushed on attempt ${attempt}."
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed; retrying in 5s..."
+            git rebase --abort 2>/dev/null || true
+            sleep 5
+          done
+
+          echo "::error::Could not push the signal log after 5 attempts."
+          echo "The scan itself succeeded and results were published to the Worker."
+          exit 1

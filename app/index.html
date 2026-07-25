@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>BursaMusangKing</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f7f7f5; --card:#ffffff; --text:#111110; --muted:#6b6a66; --faint:#9a9994;
+  --line:rgba(17,17,16,.12); --accent:#2a78d6; --accent-bg:#e6f1fb;
+  --up:#0ca30c; --down:#d03b3b; --radius:10px;
+}
+html[data-theme="dark"]{
+  --bg:#111110; --card:#1c1c1a; --text:#f2f2ef; --muted:#a3a29c; --faint:#7a7975;
+  --line:rgba(255,255,255,.13); --accent:#5b9cea; --accent-bg:#12283f;
+  --up:#3fbe3f; --down:#e26363;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:400 15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  overscroll-behavior-y:contain}
+#app{max-width:520px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;
+  background:var(--card)}
+header{position:sticky;top:0;z-index:10;background:var(--card);
+  border-bottom:.5px solid var(--line);padding:14px 16px 10px;
+  padding-top:calc(14px + env(safe-area-inset-top));
+  display:flex;align-items:center;justify-content:space-between;gap:10px}
+header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.icon-btn{background:none;border:0;color:var(--muted);font-size:19px;cursor:pointer;
+  padding:4px;line-height:1}
+main{flex:1;padding:12px 16px 0;overflow-x:hidden}
+.meta{margin:0 0 6px;font-size:12px;color:var(--muted)}
+.banner{display:none;margin:0 0 10px;padding:8px 12px;border-radius:var(--radius);
+  background:var(--accent-bg);color:var(--accent);font-size:12.5px}
+.banner.show{display:block}
+.banner.err{background:rgba(208,59,59,.12);color:var(--down)}
+
+.row{display:flex;align-items:center;gap:10px;padding:9px 0;
+  border-bottom:.5px solid var(--line);cursor:pointer}
+.row:last-child{border-bottom:0}
+.spark{width:58px;height:34px;flex:0 0 auto;position:relative}
+.row-mid{flex:1;min-width:0}
+.row-mid .name{margin:0;font-size:13.5px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-mid .sub{margin:0;font-size:11.5px;color:var(--muted)}
+.row-end{text-align:right;flex:0 0 auto}
+.row-end .chg{margin:0;font-size:13.5px;font-weight:600}
+.row-end .px{margin:0;font-size:11.5px;color:var(--faint)}
+.up{color:var(--up)} .down{color:var(--down)}
+.badge{display:inline-block;margin-left:5px;padding:1px 5px;border-radius:5px;
+  background:var(--accent-bg);color:var(--accent);font-size:9.5px;font-weight:600;
+  vertical-align:1px}
+
+.scroller{max-height:calc(100dvh - 300px);overflow-y:auto;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch}
+.scroller::-webkit-scrollbar{display:none}
+.empty{padding:32px 0;text-align:center;color:var(--muted);font-size:13px}
+
+.chips{display:flex;gap:5px;overflow-x:auto;padding:8px 0 9px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{font-size:11px;padding:3px 9px;border-radius:var(--radius);white-space:nowrap;
+  border:.5px solid var(--line);color:var(--muted);background:none;cursor:pointer;
+  font-family:inherit}
+.chip.on{background:var(--accent-bg);color:var(--accent);border-color:transparent;
+  font-weight:600}
+.chip .n{opacity:.65;margin-left:3px}
+
+.primary{width:100%;margin-bottom:14px;padding:11px;border-radius:var(--radius);
+  border:.5px solid var(--line);background:none;color:var(--text);font:inherit;
+  font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;gap:7px}
+.primary:active{transform:scale(.985)}
+.primary:disabled{opacity:.55;cursor:default}
+
+.detail-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.detail-head h2{margin:0;font-size:15px;font-weight:600}
+.detail-head p{margin:0;font-size:12px;color:var(--muted)}
+.big-chart{position:relative;height:260px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;
+  margin-bottom:14px}
+.stats div p:first-child{margin:0;font-size:11px;color:var(--muted)}
+.stats div p:last-child{margin:0;font-size:15px;font-weight:600}
+.panel{background:var(--bg);border-radius:var(--radius);padding:11px 13px;
+  margin-bottom:14px}
+.panel .h{margin:0 0 7px;font-size:12px;color:var(--muted)}
+.panel .kv{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+.panel .kv:last-child{margin-bottom:0}
+.panel .kv b{font-weight:600}
+
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;
+  margin-bottom:16px}
+.cards .c{background:var(--bg);border-radius:var(--radius);padding:11px 13px}
+.cards .c p:first-child{margin:0;font-size:12px;color:var(--muted)}
+.cards .c p:last-child{margin:0;font-size:21px;font-weight:600}
+.strat-block{border-top:.5px solid var(--line);padding:11px 0}
+.strat-block h3{margin:0 0 5px;font-size:13.5px;font-weight:600}
+.strat-block .l{margin:0;font-size:12px;color:var(--muted)}
+.disclaimer{font-size:11px;color:var(--faint);padding:4px 0 18px;line-height:1.55}
+
+nav{position:sticky;bottom:0;display:flex;background:var(--card);
+  border-top:.5px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;color:var(--muted);font:inherit;
+  font-size:11px;padding:9px 0;display:flex;flex-direction:column;align-items:center;
+  gap:3px;cursor:pointer}
+nav button.on{color:var(--accent)}
+nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="title">BursaMusangKing</h1>
+    <button class="icon-btn" id="theme" aria-label="Toggle dark mode">◐</button>
+  </header>
+
+  <main>
+    <div class="banner" id="banner"></div>
+
+    <!-- ============ list view ============ -->
+    <section id="view-list">
+      <p class="meta" id="count">Loading…</p>
+      <div class="scroller"><div id="list"></div></div>
+      <p class="meta" id="updated" style="text-align:center;margin:8px 0"></p>
+      <div class="chips" id="chips"></div>
+      <button class="primary" id="run">▶ Run scan now</button>
+    </section>
+
+    <!-- ============ detail view ============ -->
+    <section id="view-detail" hidden>
+      <div class="detail-head">
+        <button class="icon-btn" id="back" aria-label="Back">←</button>
+        <div><h2 id="d-name"></h2><p id="d-sub">3 month daily candles</p></div>
+      </div>
+      <div class="big-chart"><canvas id="d-chart"></canvas></div>
+      <div class="stats">
+        <div><p>RSI</p><p id="d-rsi">–</p></div>
+        <div><p>ADX</p><p id="d-adx">–</p></div>
+        <div><p>EMA20</p><p id="d-ema">–</p></div>
+        <div><p>Vol</p><p id="d-vol">–</p></div>
+      </div>
+      <div class="panel">
+        <p class="h">Suggested levels</p>
+        <div class="kv"><span style="color:var(--muted)">Entry</span><b id="d-entry">–</b></div>
+        <div class="kv"><span style="color:var(--muted)">Stop-loss</span><b id="d-stop" class="down">–</b></div>
+      </div>
+      <p class="disclaimer">Levels are derived from EMA20 and ATR for reference
+        only. Not financial advice — size positions so the worst case is survivable.</p>
+    </section>
+
+    <!-- ============ weekly view ============ -->
+    <section id="view-weekly" hidden>
+      <div class="cards" id="w-cards"></div>
+      <p class="meta" id="w-curve-label">Equity curve</p>
+      <div style="position:relative;height:150px;margin-bottom:6px">
+        <canvas id="w-chart"></canvas>
+      </div>
+      <div id="w-strats"></div>
+      <p class="disclaimer" id="w-note"></p>
+    </section>
+  </main>
+
+  <nav>
+    <button class="on" data-view="list">
+      <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      BursaMusangKing
+    </button>
+    <button data-view="weekly">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15l2.5 2.5L16 12"/></svg>
+      Weekly
+    </button>
+  </nav>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-chart-financial/0.2.1/chartjs-chart-financial.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

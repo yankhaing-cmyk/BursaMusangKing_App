@@ -1,0 +1,99 @@
+"""
+This project's OWN signal history.
+
+Deliberately a separate file from the upstream repo's signals_myx.csv so the
+two pipelines never fight over the same CSV or each other's git commits. Same
+idea and same is_new semantics as upstream signal_log.py: a (symbol, strategy)
+pair that already fired within NEW_WINDOW_DAYS is a repeat, not a new signal.
+
+Committed back to THIS repo by the workflow, so history accrues run over run.
+"""
+
+import os
+from datetime import datetime, timedelta
+
+import pandas as pd
+
+MARKET = os.environ.get("MARKET", "MYX").upper()
+LOG_FILE = f"app_signals_{MARKET.lower()}.csv"
+NEW_WINDOW_DAYS = 7
+
+COLUMNS = ["date", "symbol", "strategy", "close", "rsi", "adx",
+           "vol_ratio", "roc10", "is_new"]
+
+
+def _as_bool(series: pd.Series) -> pd.Series:
+    """CSV round-trips booleans as text. pandas usually infers bool dtype, but
+    a single blank or odd value flips the column to object, and then
+    `df["is_new"] == True` silently matches nothing — which shows up as an
+    empty review rather than an error. Parse explicitly instead."""
+    if series.dtype == bool:
+        return series
+    return (series.astype(str).str.strip().str.lower()
+            .isin(["true", "1", "yes", "t"]))
+
+
+def load_log() -> pd.DataFrame:
+    if os.path.exists(LOG_FILE):
+        df = pd.read_csv(LOG_FILE)
+        if df.empty:
+            return pd.DataFrame(columns=COLUMNS)
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df = df[df["date"].notna()]
+        if "is_new" in df.columns:
+            df["is_new"] = _as_bool(df["is_new"])
+        return df
+    return pd.DataFrame(columns=COLUMNS)
+
+
+def mark_new(hits: dict, now: datetime | None = None) -> dict:
+    """Annotate each hit with is_new, using log state BEFORE today's append."""
+    now = now or datetime.now()
+    log = load_log()
+    today = pd.Timestamp(now.date())
+    cutoff = today - timedelta(days=NEW_WINDOW_DAYS)
+    if log.empty:
+        recent_pairs = set()
+    else:
+        recent = log[(log["date"] >= cutoff) & (log["date"] < today)]
+        recent_pairs = set(zip(recent["symbol"], recent["strategy"]))
+
+    for strat, rows in hits.items():
+        for r in rows:
+            r["is_new"] = (r["symbol"], strat) not in recent_pairs
+    return hits
+
+
+def append(hits: dict, now: datetime | None = None) -> tuple[int, int]:
+    """Append today's hits. Returns (n_logged, n_new). Idempotent per day."""
+    now = now or datetime.now()
+    scan_date = pd.Timestamp(now.date())
+    log = load_log()
+
+    if log.empty:
+        today_pairs = set()
+    else:
+        today = log[log["date"] == scan_date]
+        today_pairs = set(zip(today["symbol"], today["strategy"]))
+
+    rows, n_new = [], 0
+    for strat, items in hits.items():
+        for r in items:
+            key = (r["symbol"], strat)
+            if key in today_pairs:
+                continue
+            is_new = bool(r.get("is_new", True))
+            n_new += int(is_new)
+            rows.append({
+                "date": scan_date, "symbol": r["symbol"], "strategy": strat,
+                "close": r["close"], "rsi": r["rsi"], "adx": r["adx"],
+                "vol_ratio": r["vol_ratio"], "roc10": r["roc10"],
+                "is_new": is_new,
+            })
+            today_pairs.add(key)
+
+    if rows:
+        log = pd.concat([log, pd.DataFrame(rows)], ignore_index=True)
+        log.to_csv(LOG_FILE, index=False)
+
+    return len(rows), n_new

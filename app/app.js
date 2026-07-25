@@ -7,9 +7,9 @@
 
   const LABELS = {
     trending: "Trending",
-    early_uptrend: "EarlyUptrend",
+    early_uptrend: "Early uptrend",
     reversal: "Reversal",
-    gaining_momentum: "GainMomentum",
+    gaining_momentum: "Momentum",
   };
 
   let latest = null, weekly = null, backtest = null;
@@ -50,7 +50,9 @@
   function redraw() {
     if (view === "list" && latest) drawSparks();
     if (view === "detail" && current) drawDetail();
-    if (view === "weekly" && weekly) C.line($("w-chart"), weekly.equity_curve || []);
+    if (view === "weekly" && weekly && (weekly.equity_curve || []).length > 1) {
+      C.line($("w-chart"), weekly.equity_curve);
+    }
     if (view === "backtest" && backtest) drawBtChart();
   }
 
@@ -104,9 +106,10 @@
     } catch { /* weekly stays empty until the first review runs */ }
     try {
       backtest = await get("/backtest");
+      btEmpty(false);
       renderBacktest();
     } catch {
-      $("bt-meta").textContent = "No backtest yet — run the App Backtest workflow.";
+      btEmpty(true);
     }
   }
 
@@ -265,10 +268,22 @@
         <p class="l">best ${esc(s.best.symbol)} ${s.best.ret > 0 ? "+" : ""}${s.best.ret}% ·
            worst ${esc(s.worst.symbol)} ${s.worst.ret > 0 ? "+" : ""}${s.worst.ret}%</p>
       </div>`;
-    }).join("") || `<p class="empty">${esc(weekly.note || "No review data yet.")}</p>`;
+    }).join("") || `<p class="empty">No completed signals yet.<br><br>
+      This fills in once scans have been logging for a few days — it only
+      scores signals flagged NEW, and needs at least 5 trading days after one
+      fires before there is a result to measure.</p>`;
 
-    $("w-note").textContent = weekly.note || "";
-    if (view === "weekly") C.line($("w-chart"), weekly.equity_curve || []);
+    // The note used to render twice — once as the empty-state text inside
+    // #w-strats and again in #w-note. Show it in exactly one place.
+    const hasStrats = (weekly.strategies || []).length > 0;
+    $("w-note").textContent = hasStrats ? (weekly.note || "") : "";
+
+    // An empty canvas still occupies its CSS height, which left a large blank
+    // gap on a screen that has nothing to plot. Collapse it instead.
+    const pts = (weekly.equity_curve || []).length;
+    $("w-chart").parentElement.style.display = pts > 1 ? "" : "none";
+    $("w-curve-label").style.display = pts > 1 ? "" : "none";
+    if (view === "weekly" && pts > 1) C.line($("w-chart"), weekly.equity_curve);
   }
 
   // --------------------------------------------------------------- backtest
@@ -285,6 +300,22 @@
       btStrat = best && best.strategy;
     }
     return list.find((x) => x.strategy === btStrat) || list[0] || null;
+  }
+
+  function btEmpty(on) {
+    // With no report, the table header, equity legend and config box render as
+    // hollow scaffolding around a blank gap, which reads as broken rather than
+    // as "nothing here yet". Hide the lot and show one line.
+    ["bt-chips", "bt-verdict", "bt-hint", "bt-tbl", "bt-curve-label",
+     "bt-legend", "bt-chart-wrap", "bt-cards", "bt-cfg-label", "bt-cfg",
+     "bt-updated", "bt-note"].forEach((id) => {
+      const el = $(id);
+      if (el) el.style.display = on ? "none" : "";
+    });
+    $("bt-meta").textContent = on
+      ? "No backtest yet. Run the App Backtest workflow from the Actions tab — "
+        + "it takes 20–40 minutes."
+      : "";
   }
 
   function renderBacktest() {
@@ -314,8 +345,11 @@
     const tr = cur.train || {}, te = cur.test || {};
     const pct = (x) => (x == null ? "–" : x + "%");
     const num = (x) => (x == null ? "–" : x);
+    const wl = (x) => (x.wins == null ? "–" : `${x.wins}/${x.losses}`);
     const rows = [
       { k: "win", l: "Win rate", tr: pct(tr.win_rate), te: pct(te.win_rate), tap: 1 },
+      { k: "lose", l: "Loss rate", tr: pct(tr.loss_rate), te: pct(te.loss_rate), tap: 1 },
+      { k: null, l: "Won / lost", tr: wl(tr), te: wl(te) },
       { k: null, l: "Profit factor", tr: num(tr.profit_factor), te: num(te.profit_factor) },
       { k: "all", l: "Avg return", tr: pct(tr.avg), te: pct(te.avg), tap: 1 },
       { k: "lose", l: "Worst trade", tr: pct(tr.worst), te: pct(te.worst), tap: 1 },

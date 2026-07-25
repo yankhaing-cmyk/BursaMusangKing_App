@@ -13,7 +13,8 @@
   };
 
   let latest = null, weekly = null, backtest = null;
-  let btStrat = null, btOpen = null;
+  let btStrat = null, btOpen = null, btKind = null, btSort = "best";
+  let wSort = "recent";
   const historyCache = {};
   let filter = null, current = null, view = "list";
   let pollTimer = null, resizeTimer = null;
@@ -276,6 +277,7 @@
     // #w-strats and again in #w-note. Show it in exactly one place.
     const hasStrats = (weekly.strategies || []).length > 0;
     $("w-note").textContent = hasStrats ? (weekly.note || "") : "";
+    renderSignals();
 
     // An empty canvas still occupies its CSS height, which left a large blank
     // gap on a screen that has nothing to plot. Collapse it instead.
@@ -399,34 +401,16 @@
     C.split($("bt-chart"), eq.train || [], eq.test || []);
   }
 
+  const SORTS = [
+    ["best", "Best first"], ["worst", "Worst first"], ["recent", "Most recent"],
+  ];
+
   function openTrades(kind, idx) {
-    const cur = btCurrent();
-    if (!cur) return;
-    // Only test trades are offered — train trades are the in-sample half the
-    // strategy was tuned against, so inspecting them tells you nothing useful.
-    let rows = (cur.trades || []).filter((t) => t.p === "test");
-    let title = "All test trades";
-    if (kind === "win") { rows = rows.filter((t) => t.r > 0); title = "Winning trades"; }
-    if (kind === "lose") {
-      rows = rows.filter((t) => t.r <= 0).sort((a, b) => a.r - b.r);
-      title = "Losing trades, worst first";
-    }
-
-    $("tl-title").textContent = `${title} · ${rows.length}`;
-    $("tl-rows").innerHTML = rows.length
-      ? rows.map((t) => `
-        <div class="tl-row">
-          <span class="sym">${esc(t.s)}</span>
-          <span class="dt">${t.in.slice(5)} → ${t.out.slice(5)}</span>
-          <span class="ret ${t.r > 0 ? "up" : "down"}">${t.r > 0 ? "+" : ""}${t.r}%</span>
-        </div>`).join("")
-      : `<p class="empty">No trades in this bucket.</p>`;
-
-    const capped = (cur.test || {}).trades > rows.length && kind === "all";
-    $("tl-note").textContent = capped
-      ? `Showing ${rows.length} most recent of ${(cur.test || {}).trades}`
-      : `${rows.length} trade${rows.length === 1 ? "" : "s"}`;
-
+    btKind = kind;
+    // Sensible default per bucket: winners are interesting best-first
+    // (concentration), losers worst-first (tail risk).
+    btSort = kind === "lose" ? "worst" : "best";
+    drawTrades();
     const panel = $("bt-panel");
     panel.style.transition = "height .2s ease";
     panel.style.height = $("bt-panel-in").offsetHeight + "px";
@@ -435,14 +419,150 @@
       t.classList.toggle("on", t.dataset.i === idx));
   }
 
+  function drawTrades() {
+    const cur = btCurrent();
+    if (!cur || !btKind) return;
+    // Only test trades are offered — train trades are the in-sample half the
+    // strategy was tuned against, so inspecting them tells you nothing useful.
+    let rows = (cur.trades || []).filter((t) => t.p === "test");
+    let title = "All test trades";
+    if (btKind === "win") { rows = rows.filter((t) => t.r > 0); title = "Winning trades"; }
+    if (btKind === "lose") { rows = rows.filter((t) => t.r <= 0); title = "Losing trades"; }
+
+    rows = rows.slice().sort(
+      btSort === "best" ? (a, b) => b.r - a.r
+      : btSort === "worst" ? (a, b) => a.r - b.r
+      : (a, b) => (a.in < b.in ? 1 : a.in > b.in ? -1 : 0));
+
+    // Share of the period's gross profit (or gross loss for a losing trade),
+    // measured against the true period totals from the exporter rather than
+    // the visible rows — so a capped list can't inflate the percentages.
+    const te = cur.test || {};
+    const gp = te.gross_profit || 0, gl = te.gross_loss || 0;
+    const share = (r) => {
+      const base = r > 0 ? gp : gl;
+      if (!base) return null;
+      return Math.abs(r) / base * 100;
+    };
+
+    $("tl-title").textContent = `${title} · ${rows.length}`;
+
+    $("tl-sort").innerHTML = SORTS.map(([k, l]) =>
+      `<button class="sort${k === btSort ? " on" : ""}" data-s="${k}">${l}</button>`).join("");
+    $("tl-sort").querySelectorAll(".sort").forEach((b) => {
+      b.onclick = () => {
+        btSort = b.dataset.s;
+        drawTrades();
+        $("bt-panel").style.height = $("bt-panel-in").offsetHeight + "px";
+      };
+    });
+
+    let cum = 0;
+    $("tl-rows").innerHTML = rows.length
+      ? rows.map((t) => {
+          const sh = share(t.r);
+          let conTxt = "";
+          if (sh != null) {
+            // Cumulative only reads meaningfully down a single-sign,
+            // magnitude-ordered list — otherwise it's an arbitrary running sum.
+            const showCum = btKind !== "all" &&
+              ((btKind === "win" && btSort === "best") ||
+               (btKind === "lose" && btSort === "worst"));
+            if (showCum) {
+              cum += sh;
+              conTxt = `${sh.toFixed(1)}% · cum ${cum.toFixed(0)}%`;
+            } else {
+              conTxt = `${sh.toFixed(1)}% of ${t.r > 0 ? "profit" : "loss"}`;
+            }
+          }
+          return `
+        <div class="tl-row">
+          <div class="tl-l1">
+            <span class="sym">${esc(t.s)}</span>
+            <span class="ret ${t.r > 0 ? "up" : "down"}">${t.r > 0 ? "+" : ""}${t.r}%</span>
+          </div>
+          <div class="tl-l2">
+            <span class="dt">${t.in.slice(5)} → ${t.out.slice(5)} · ${t.h}d · ${esc(t.x)}</span>
+            <span class="con">${conTxt}</span>
+          </div>
+        </div>`;
+        }).join("")
+      : `<p class="empty">No trades in this bucket.</p>`;
+
+    const capped = (te.trades || 0) > (cur.trades || []).filter((t) => t.p === "test").length;
+    $("tl-note").textContent = capped
+      ? `Showing the most recent ${rows.length} of ${te.trades}`
+      : `${rows.length} trade${rows.length === 1 ? "" : "s"}`;
+  }
+
   function closeTrades() {
     const panel = $("bt-panel");
     if (panel) panel.style.height = "0px";
-    btOpen = null;
+    btOpen = null; btKind = null;
     const r = $("bt-rows");
     if (r) r.querySelectorAll(".tap").forEach((t) => t.classList.remove("on"));
   }
   $("tl-close").onclick = closeTrades;
+
+  const W_SORTS = [
+    ["recent", "Newest"], ["best10", "Best +10d"], ["worst10", "Worst +10d"],
+    ["pending", "Pending first"],
+  ];
+
+  function renderSignals() {
+    const all = (weekly && weekly.signals) || [];
+    $("w-siglist").hidden = !all.length;
+    if (!all.length) return;
+
+    const pend = all.filter((x) => x.p).length;
+    $("w-sig-title").textContent =
+      `Signals · ${all.length}` + (pend ? ` · ${pend} still pending` : "");
+
+    $("w-sort").innerHTML = W_SORTS.map(([k, l]) =>
+      `<button class="sort${k === wSort ? " on" : ""}" data-s="${k}">${l}</button>`).join("");
+    $("w-sort").querySelectorAll(".sort").forEach((b) => {
+      b.onclick = () => { wSort = b.dataset.s; renderSignals(); };
+    });
+
+    // Pending signals have no return to rank by. Rather than treating a missing
+    // value as zero — which would scatter them through the middle of a sorted
+    // list — they always sink to the bottom of a return sort.
+    const byR = (dir) => (a, b) => {
+      const x = a.r10, y = b.r10;
+      if (x == null && y == null) return a.d < b.d ? 1 : -1;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return dir * (y - x);
+    };
+    const rows = all.slice().sort(
+      wSort === "best10" ? byR(1)
+      : wSort === "worst10" ? byR(-1)
+      : wSort === "pending" ? ((a, b) => (b.p ? 1 : 0) - (a.p ? 1 : 0)
+          || (a.d < b.d ? 1 : -1))
+      : (a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+
+    const cell = (label, v) => v == null
+      ? `<span>${label} <b style="color:var(--faint)">–</b></span>`
+      : `<span>${label} <b class="${v > 0 ? "up" : "down"}">${v > 0 ? "+" : ""}${v}%</b></span>`;
+
+    $("w-sigs").innerHTML = rows.map((x) => `
+      <div class="sg-row">
+        <div class="sg-top">
+          <span class="sym">${esc(x.s)}${x.p ? ' <span class="pend">PENDING</span>' : ""}</span>
+          <span class="d">${fmtDay(x.d)}</span>
+        </div>
+        ${x.n ? `<p class="sg-co">${esc(x.n)}</p>` : ""}
+        <div class="sg-h">
+          ${cell("5d", x.r5)}${cell("10d", x.r10)}${cell("20d", x.r20)}
+        </div>
+      </div>`).join("");
+  }
+
+  function fmtDay(iso) {
+    const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const [, m, d] = iso.split("-");
+    return `${d} ${M[+m - 1]}`;
+  }
 
   // ------------------------------------------------------------------- nav
   function show(v) {

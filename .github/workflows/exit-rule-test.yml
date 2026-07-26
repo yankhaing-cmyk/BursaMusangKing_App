@@ -12,7 +12,7 @@ on:
       scope:
         description: "What to test"
         required: true
-        default: "top300"
+        default: "symbol"
         type: choice
         options:
           - top300          # recommended — enough trades to be meaningful

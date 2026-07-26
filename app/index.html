@@ -19,6 +19,7 @@ html[data-theme="dark"]{
   --up:#3fbe3f; --down:#e26363;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--text);
   font:400 15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   overscroll-behavior-y:contain}
@@ -138,7 +139,6 @@ html[data-theme="dark"] .v-warn{color:#e0a94a}
 .exitbar button.on{background:var(--accent-bg);color:var(--accent);
   border-color:transparent;font-weight:600}
 .exitrule{margin:-6px 0 11px;font-size:10.5px;color:var(--faint);line-height:1.45}
-.chipgrid[hidden]{display:none}
 .chipgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;
   padding:0 0 10px}
 .chipgrid .chip{padding:5px 4px;text-align:center;overflow:hidden;

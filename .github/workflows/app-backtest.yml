@@ -6,13 +6,17 @@ name: App Backtest
 # needs recent bars.
 on:
   schedule:
-    - cron: "0 0 * * 6"     # Saturday 12:00 UTC = 20:00 MYT
+    - cron: "0 12 * * 6"     # Saturday 12:00 UTC = 20:00 MYT
   workflow_dispatch:
     inputs:
       top:
         description: "Backtest the N most liquid stocks (0 = entire market, very slow)"
         required: false
         default: "300"
+      mult:
+        description: "ATR multiple for the trailing stop (2.0 tight, 3.5 loose)"
+        required: false
+        default: "3.0"
 
 permissions:
   contents: read
@@ -44,7 +48,11 @@ jobs:
           UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO || 'yankhaing-cmyk/BursaMusangKing' }}
           WORKER_URL: ${{ secrets.WORKER_URL }}
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
-        run: python export_backtest.py --top ${{ github.event.inputs.top || '300' }} --publish
+        run: |
+          python export_backtest.py \
+            --top ${{ github.event.inputs.top || '300' }} \
+            --mult ${{ github.event.inputs.mult || '3.0' }} \
+            --publish
 
       - name: Upload report
         if: always()

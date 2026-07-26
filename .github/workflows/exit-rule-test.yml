@@ -1,0 +1,115 @@
+name: Exit Rule Test
+
+# Compares exit rules (fixed target vs ATR trailing vs EMA20) on identical
+# entry signals. Read-only: prints a table and uploads it as an artifact.
+# Publishes nothing, so the Backtest tab in the app is unaffected.
+#
+# Manual only — there is no schedule. Run it when you want to compare, read
+# the result in the log, then decide.
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "What to test"
+        required: true
+        default: "top300"
+        type: choice
+        options:
+          - top300          # recommended — enough trades to be meaningful
+          - top100          # faster, thinner sample
+          - top500          # slower
+          - symbol          # a single counter, set the ticker below
+      symbol:
+        description: "Ticker, only used when scope = symbol (e.g. GCB)"
+        required: false
+        default: "GCB"
+      strategy:
+        description: "Strategy to test"
+        required: true
+        default: "trending"
+        type: choice
+        options:
+          - trending
+          - early_uptrend
+          - reversal
+          - gaining_momentum
+          - all
+      split:
+        description: "Train/test split (0 disables the split)"
+        required: false
+        default: "0.7"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exit-rule-test
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install --upgrade git+https://github.com/rongardF/tvdatafeed.git
+
+      - name: Compare exit rules
+        env:
+          MARKET: ${{ vars.MARKET || 'MYX' }}
+          UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO || 'yankhaing-cmyk/BursaMusangKing' }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -o pipefail
+          SCOPE="${{ github.event.inputs.scope }}"
+          case "$SCOPE" in
+            top100) ARGS="--top 100" ;;
+            top300) ARGS="--top 300" ;;
+            top500) ARGS="--top 500" ;;
+            symbol) ARGS="--symbol ${{ github.event.inputs.symbol }}" ;;
+            *)      ARGS="--top 300" ;;
+          esac
+
+          STRAT="${{ github.event.inputs.strategy }}"
+          if [ "$STRAT" != "all" ]; then
+            ARGS="$ARGS --strategy $STRAT"
+          fi
+
+          ARGS="$ARGS --split ${{ github.event.inputs.split }}"
+
+          echo "Running: python trail_test.py $ARGS"
+          echo
+          python trail_test.py $ARGS 2>&1 | tee exit-rule-report.txt
+
+      # The table is the whole deliverable, so put it on the run summary page
+      # rather than making you scroll the raw log to find it.
+      - name: Publish to run summary
+        if: always()
+        run: |
+          {
+            echo '## Exit rule comparison'
+            echo
+            echo "scope: \`${{ github.event.inputs.scope }}\` · strategy: \`${{ github.event.inputs.strategy }}\`"
+            echo
+            echo '```'
+            cat exit-rule-report.txt 2>/dev/null || echo "(no output — the step above failed)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exit-rule-report
+          path: exit-rule-report.txt
+          if-no-files-found: ignore
+          retention-days: 30

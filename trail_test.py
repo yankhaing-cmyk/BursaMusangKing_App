@@ -284,6 +284,15 @@ if __name__ == "__main__":
 
     print(f"[{datetime.now():%Y-%m-%d %H:%M}] {len(symbols)} symbol(s), "
           f"strategies: {', '.join(strategies)}")
-    print(f"fixed rule: +{tp_pct*100:.0f}% target / -{stop_pct*100:.0f}% stop "
-          f"/ {hold} bars")
+    print("\nExit rules being compared on identical entries:")
+    print(f"  fixed      +{tp_pct*100:.0f}% target, -{stop_pct*100:.0f}% stop, "
+          f"{hold} bar limit   <- your current rule, the baseline")
+    for m in TRAIL_MULTS:
+        print(f"  trail{m}   no target, stop trails {m} x ATR14 below the "
+              f"highest close, {MAX_HOLD_TRAIL} bar limit")
+    print(f"  ema20      no target, exit on first close below EMA20, "
+          f"{MAX_HOLD_TRAIL} bar limit")
+    print(f"\nEvery trailing rule keeps the -{stop_pct*100:.0f}% initial stop "
+          "until the trail rises above it,\nand the stop only ever ratchets "
+          "up. None of them take profit at a fixed level.\n")
     run(symbols, strategies, a.split, stop_pct, tp_pct, hold)

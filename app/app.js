@@ -14,6 +14,7 @@
 
   let latest = null, weekly = null, backtest = null;
   let btStrat = null, btOpen = null, btKind = null, btSort = "best";
+  let btExit = "fixed";
   let wSort = "recent";
   const historyCache = {};
   let filter = null, current = null, view = "list";
@@ -290,24 +291,36 @@
   // --------------------------------------------------------------- backtest
   const LEVEL_ICON = { good: "✓", warn: "!", bad: "✕", thin: "·" };
 
-  function btCurrent() {
+  const nTest = (s, exit) =>
+    (((s.exits || {})[exit] || {}).test || {}).trades || 0;
+
+  function btStrategy() {
     if (!backtest) return null;
     const list = backtest.strategies || [];
+    if (!list.length) return null;
     if (!btStrat) {
-      // default to the strategy with the most test trades, not just the first —
-      // a strategy with 3 trades tells you nothing and shouldn't open by default
+      // Default to the strategy with the most test trades, not just the first —
+      // a strategy with 3 trades tells you nothing and shouldn't open by default.
       const best = list.reduce((a, b) =>
-        ((b.test || {}).trades || 0) > ((a.test || {}).trades || 0) ? b : a, list[0]);
+        nTest(b, "fixed") > nTest(a, "fixed") ? b : a, list[0]);
       btStrat = best && best.strategy;
     }
-    return list.find((x) => x.strategy === btStrat) || list[0] || null;
+    return list.find((x) => x.strategy === btStrat) || list[0];
+  }
+
+  /** The selected strategy under the selected exit rule. */
+  function btCurrent() {
+    const s = btStrategy();
+    if (!s) return null;
+    const ex = s.exits || {};
+    return ex[btExit] || ex.fixed || null;
   }
 
   function btEmpty(on) {
     // With no report, the table header, equity legend and config box render as
     // hollow scaffolding around a blank gap, which reads as broken rather than
     // as "nothing here yet". Hide the lot and show one line.
-    ["bt-chips", "bt-verdict", "bt-hint", "bt-tbl", "bt-curve-label",
+    ["bt-chips", "bt-exits", "bt-exitrule", "bt-verdict", "bt-hint", "bt-tbl", "bt-curve-label",
      "bt-legend", "bt-chart-wrap", "bt-cards", "bt-cfg-label", "bt-cfg",
      "bt-updated", "bt-note"].forEach((id) => {
       const el = $(id);
@@ -321,14 +334,34 @@
 
   function renderBacktest() {
     if (!backtest) return;
+    const strat = btStrategy();
     const cur = btCurrent();
+    const rules = backtest.exit_rules
+      || [{ key: "fixed", label: "Fixed", detail: "" }];
+
     $("bt-meta").textContent =
       `${backtest.universe_size} stocks · ${backtest.date_from || "?"} – ${backtest.date_to || "?"}` +
       (cur ? ` · ${cur.trades_total || 0} trades` : "");
 
+    // Exit rule sits directly above the verdict it changes, so switching it
+    // and watching the banner flip is one glance rather than two screens.
+    $("bt-exits").innerHTML = rules.map((r) =>
+      `<button class="${r.key === btExit ? "on" : ""}" data-e="${r.key}">${esc(r.label)}</button>`
+    ).join("");
+    $("bt-exits").querySelectorAll("button").forEach((b) => {
+      b.onclick = () => {
+        btExit = b.dataset.e; btOpen = null;
+        closeTrades(); renderBacktest();
+      };
+    });
+    const rule = rules.find((r) => r.key === btExit);
+    $("bt-exitrule").textContent = rule ? rule.detail || "" : "";
+
+    // Strategy chips live at the bottom beside the nav, matching Screener.
+    $("bt-chips").hidden = false;
     $("bt-chips").innerHTML = (backtest.strategies || []).map((s) => `
       <button class="chip${s.strategy === btStrat ? " on" : ""}" data-s="${s.strategy}">
-        ${LABELS[s.strategy] || s.strategy}<span class="n">${(s.test || {}).trades || 0}</span>
+        ${LABELS[s.strategy] || s.strategy}<span class="n">${nTest(s, btExit)}</span>
       </button>`).join("");
     $("bt-chips").querySelectorAll(".chip").forEach((c) => {
       c.onclick = () => {
@@ -339,8 +372,9 @@
 
     if (!cur) return;
     const v = cur.verdict || {};
+    const vs = v.vs ? ` ${v.vs}` : "";
     $("bt-verdict").innerHTML = v.text
-      ? `<div class="verdict v-${v.level || "thin"}"><span>${LEVEL_ICON[v.level] || "·"}</span><span>${esc(v.text)}</span></div>`
+      ? `<div class="verdict v-${v.level || "thin"}"><span>${LEVEL_ICON[v.level] || "·"}</span><span>${esc(v.text + vs)}</span></div>`
       : "";
 
     const tr = cur.train || {}, te = cur.test || {};
@@ -381,7 +415,7 @@
       card("Best trade", te.best == null ? "–" : "+" + te.best + "%") +
       card("Median", te.median == null ? "–" : te.median + "%");
 
-    const cfg = (backtest.strategy_config || {})[cur.strategy] || {};
+    const cfg = (backtest.strategy_config || {})[strat.strategy] || {};
     const p = backtest.params || {};
     $("bt-cfg").textContent =
       Object.entries(cfg).map(([k, x]) => `${k} ${x}`).join(" · ") +
@@ -580,6 +614,8 @@
     ["list", "detail", "weekly", "backtest"].forEach((x) => {
       $("view-" + x).hidden = x !== v;
     });
+    // The chip grid sits outside <main>, so it needs hiding explicitly.
+    $("bt-chips").hidden = v !== "backtest" || !backtest;
     document.querySelectorAll("nav button").forEach((b) => {
       b.classList.toggle("on", b.dataset.view === v ||
         (v === "detail" && b.dataset.view === "list"));

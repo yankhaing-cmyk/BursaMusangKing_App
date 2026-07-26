@@ -213,8 +213,24 @@
       `<span class="stat">ROC10 ${s.roc10}%</span>`;
     $("d-co").textContent = s.name || "";
     $("title").textContent = s.symbol;
-    $("d-entry").textContent = s.entry != null ? `${cur} ${s.entry}` : "–";
-    $("d-stop").textContent = s.stop != null ? `${cur} ${s.stop}` : "–";
+    const ex = (latest && latest.exit_rule) || {};
+    $("d-lvl-head").textContent = "Levels" + (ex.label ? ` · ${ex.label}` : "");
+    $("d-entry").textContent = s.entry != null
+      ? `${cur} ${s.entry}` : "–";
+    $("d-stop").textContent = s.stop != null
+      ? `${cur} ${s.stop}` + (s.stop_pct_now != null ? `  ${s.stop_pct_now}%` : "")
+      : "–";
+    $("d-trail").textContent = s.trail_dist != null
+      ? `${cur} ${s.trail_dist}` + (ex.mult ? `  (${ex.mult}× ATR14)` : "")
+      : "–";
+    // Say which stop is governing today. On a volatile counter the ATR trail
+    // starts wider than the fixed floor, so the floor holds until the trail
+    // ratchets above it — showing only one number would hide that.
+    $("d-lvl-note").textContent = s.stop == null ? "" : (
+      (s.stop_from === "trail"
+        ? `Trailing stop is governing. It rises as the highest close rises and never falls back. `
+        : `The ${ex.stop_pct || 7}% initial stop is governing — the ATR trail is currently wider than it. `)
+      + `Entry is the next bar's open; ${cur} ${s.entry} is the last close, shown for reference.`);
 
     if (!historyCache[s.symbol]) {
       try {

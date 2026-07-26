@@ -5,6 +5,13 @@
   const $ = (id) => document.getElementById(id);
   const C = window.BMKChart;
 
+  const SHORT = {
+    trending: "Trending",
+    early_uptrend: "Early",
+    reversal: "Reversal",
+    gaining_momentum: "Momentum",
+  };
+
   const LABELS = {
     trending: "Trending",
     early_uptrend: "Early uptrend",
@@ -383,7 +390,7 @@
     $("bt-chips").hidden = view !== "backtest";
     $("bt-chips").innerHTML = (backtest.strategies || []).map((s) => `
       <button class="chip${s.strategy === btStrat ? " on" : ""}" data-s="${s.strategy}">
-        ${LABELS[s.strategy] || s.strategy}<span class="n">${nTest(s, btExit)}</span>
+        ${SHORT[s.strategy] || s.strategy}<span class="n">${nTest(s, btExit)}</span>
       </button>`).join("");
     $("bt-chips").querySelectorAll(".chip").forEach((c) => {
       c.onclick = () => {
@@ -648,7 +655,8 @@
         : v === "backtest" ? "Backtest"
         : "BursaMusangKing";
     }
-    window.scrollTo(0, 0);
+    const m = document.querySelector("main");
+    if (m) m.scrollTop = 0;
     // Canvases in a hidden section have zero width, so draw after they're shown.
     requestAnimationFrame(redraw);
   }

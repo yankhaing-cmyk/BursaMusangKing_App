@@ -336,12 +336,15 @@
     // With no report, the table header, equity legend and config box render as
     // hollow scaffolding around a blank gap, which reads as broken rather than
     // as "nothing here yet". Hide the lot and show one line.
-    ["bt-chips", "bt-exits", "bt-exitrule", "bt-verdict", "bt-hint", "bt-tbl", "bt-curve-label",
+    ["bt-exits", "bt-exitrule", "bt-verdict", "bt-hint", "bt-tbl", "bt-curve-label",
      "bt-legend", "bt-chart-wrap", "bt-cards", "bt-cfg-label", "bt-cfg",
      "bt-updated", "bt-note"].forEach((id) => {
       const el = $(id);
       if (el) el.style.display = on ? "none" : "";
     });
+    // The chip grid lives outside <main> and is driven by the hidden attribute,
+    // so leave style.display alone here or it would win over the attribute.
+    $("bt-chips").hidden = on || view !== "backtest";
     $("bt-meta").textContent = on
       ? "No backtest yet. Run the App Backtest workflow from the Actions tab — "
         + "it takes 20–40 minutes."
@@ -374,7 +377,10 @@
     $("bt-exitrule").textContent = rule ? rule.detail || "" : "";
 
     // Strategy chips live at the bottom beside the nav, matching Screener.
-    $("bt-chips").hidden = false;
+    // They sit outside <main>, so nothing hides them when another tab is
+    // showing — and renderBacktest() runs at startup while Screener is still
+    // on screen. Gate on the current view, or they leak onto every tab.
+    $("bt-chips").hidden = view !== "backtest";
     $("bt-chips").innerHTML = (backtest.strategies || []).map((s) => `
       <button class="chip${s.strategy === btStrat ? " on" : ""}" data-s="${s.strategy}">
         ${LABELS[s.strategy] || s.strategy}<span class="n">${nTest(s, btExit)}</span>

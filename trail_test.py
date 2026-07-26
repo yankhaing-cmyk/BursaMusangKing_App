@@ -124,14 +124,14 @@ def table(title: str, results: dict):
     cols = ["trades", "win%", "avg%", "avg_win%", "avg_loss%", "PF",
             "best%", "worst%", "hold", "giveback%", "equityx"]
     print(f"\n{title}")
-    print("-" * 104)
-    print(f"{'rule':<10}" + "".join(f"{c:>9}" for c in cols))
-    print("-" * 104)
+    print("-" * 120)
+    print(f"{'rule':<10}" + "".join(f"{c:>10}" for c in cols))
+    print("-" * 120)
     for name, s in results.items():
         if s.get("trades", 0) == 0:
             print(f"{name:<10}{'no trades':>9}")
             continue
-        print(f"{name:<10}" + "".join(f"{s.get(c, ''):>9}" for c in cols))
+        print(f"{name:<10}" + "".join(f"{s.get(c, ''):>10}" for c in cols))
 
 
 def run(symbols, strategies, split, stop_pct, tp_pct, max_hold_fixed):
@@ -155,25 +155,42 @@ def run(symbols, strategies, split, stop_pct, tp_pct, max_hold_fixed):
     variants["ema20"] = ("ema20", None, None, MAX_HOLD_TRAIL)
 
     all_trades = {k: [] for k in variants}
+    signal_count, stats_errors, err_examples = {}, {}, {}
 
     for sym, raw in have.items():
         try:
             df = indicators.enrich(raw)
-        except Exception:
+        except Exception as exc:
+            print(f"  !! {sym}: enrich failed ({exc}) — skipped")
             continue
 
         for strat in strategies:
-            # Re-run the real strategy check bar by bar so entries are
-            # identical across every exit variant.
-            entries = []
+            check = screener.CHECKS.get(strat)
+            if check is None:
+                raise SystemExit(
+                    f"unknown strategy '{strat}'. Available: "
+                    + ", ".join(screener.CHECKS))
+            params = config.STRATEGIES[strat]
+
+            # The same check function the live scan and the backtester call,
+            # evaluated at every bar. Errors are counted, not swallowed — a
+            # silent skip here reports "no trades" for what is actually a bug.
+            entries, errs, last_err = [], 0, None
             for i in range(60, len(df) - 1):
-                window = df.iloc[: i + 1]
                 try:
-                    if screener.check(window, strat):
-                        if not entries or i - entries[-1] > 5:
-                            entries.append(i)
-                except Exception:
+                    hit = check(df, i, params)
+                except Exception as exc:
+                    errs += 1
+                    last_err = exc
                     continue
+                if hit and (not entries or i - entries[-1] > 5):
+                    entries.append(i)
+
+            if errs:
+                stats_errors[strat] = stats_errors.get(strat, 0) + errs
+                if last_err is not None:
+                    err_examples.setdefault(strat, str(last_err))
+            signal_count[strat] = signal_count.get(strat, 0) + len(entries)
             if not entries:
                 continue
 
@@ -189,7 +206,21 @@ def run(symbols, strategies, split, stop_pct, tp_pct, max_hold_fixed):
                   if v else pd.DataFrame())
               for k, v in all_trades.items()}
 
+    print("entry signals found: " + (", ".join(
+        f"{k} {v}" for k, v in signal_count.items()) or "none"))
+    for strat, count in stats_errors.items():
+        print(f"  !! {strat}: {count} bars raised an error, e.g. "
+              f"{err_examples.get(strat, '?')}")
+
     n = len(frames.get("fixed", pd.DataFrame()))
+    if n == 0:
+        print("\nNo trades. Either the strategy genuinely never triggered on "
+              "this sample,\nor an error above suppressed it. With a single "
+              "symbol, no trigger is common —\n'trending' needs a full "
+              "EMA20>EMA50>EMA200 stack plus ADX and RSI in range\nall at once, "
+              "which many counters never satisfy. Try --top 300.")
+        return
+
     table(f"ALL TRADES  ({', '.join(strategies)})",
           {k: stats(v) for k, v in frames.items()})
 

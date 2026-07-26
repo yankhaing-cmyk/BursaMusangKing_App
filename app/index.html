@@ -33,6 +33,12 @@ header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon-btn{background:none;border:0;color:var(--muted);font-size:19px;cursor:pointer;
   padding:4px;line-height:1}
+.hdr-actions{display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.run-btn{font:inherit;font-size:12px;font-weight:600;padding:5px 11px;
+  border-radius:var(--radius);border:.5px solid var(--line);background:none;
+  color:var(--text);cursor:pointer;white-space:nowrap;line-height:1.3}
+.run-btn:active{transform:scale(.96)}
+.run-btn:disabled{opacity:.5;cursor:default}
 main{flex:1;min-height:0;padding:12px 16px 0;overflow-x:hidden;overflow-y:auto}
 .meta{margin:0 0 6px;font-size:12px;color:var(--muted)}
 .banner{display:none;margin:0 0 10px;padding:8px 12px;border-radius:var(--radius);
@@ -64,8 +70,8 @@ main{flex:1;min-height:0;padding:12px 16px 0;overflow-x:hidden;overflow-y:auto}
    scan button, so there is never a dead band above the nav. */
 #view-list{display:flex;flex-direction:column;height:100%;min-height:0}
 #view-list .scroller{flex:1 1 auto;min-height:0}
-#view-list .chips,#view-list .primary,#view-list #count,#view-list #updated{
-  flex:0 0 auto}
+#view-list .chips,#view-list #count,#view-list #updated{flex:0 0 auto}
+#view-list .chips{padding-bottom:12px}
 .scroller::-webkit-scrollbar{display:none}
 .empty{padding:32px 0;text-align:center;color:var(--muted);font-size:13px}
 
@@ -191,7 +197,10 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
 <div id="app">
   <header>
     <h1 id="title">BursaMusangKing</h1>
-    <button class="icon-btn" id="theme" aria-label="Toggle dark mode">◐</button>
+    <div class="hdr-actions">
+      <button class="run-btn" id="run" hidden>▶ Run</button>
+      <button class="icon-btn" id="theme" aria-label="Toggle dark mode">◐</button>
+    </div>
   </header>
 
   <main>
@@ -203,7 +212,6 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
       <div class="scroller"><div id="list"></div></div>
       <p class="meta" id="updated" style="text-align:center;margin:8px 0"></p>
       <div class="chips" id="chips"></div>
-      <button class="primary" id="run">▶ Run scan now</button>
     </section>
 
     <!-- ============ detail view ============ -->

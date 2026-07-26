@@ -643,8 +643,9 @@
     ["list", "detail", "weekly", "backtest"].forEach((x) => {
       $("view-" + x).hidden = x !== v;
     });
-    // The chip grid sits outside <main>, so it needs hiding explicitly.
+    // Both of these sit outside <main>, so they need hiding explicitly.
     $("bt-chips").hidden = v !== "backtest" || !backtest;
+    $("run").hidden = v !== "list";
     document.querySelectorAll("nav button").forEach((b) => {
       b.classList.toggle("on", b.dataset.view === v ||
         (v === "detail" && b.dataset.view === "list"));
@@ -723,6 +724,9 @@
     banner("Demo mode — showing sample data. Set WORKER_URL in config.js "
          + "to connect your live scans.");
   }
+  // Run the view switcher once at startup so header controls match the
+  // opening view — otherwise they only settle after the first nav tap.
+  show("list");
   loadAll();
 
   // Register the shell cache, and reload once when a new worker takes over so

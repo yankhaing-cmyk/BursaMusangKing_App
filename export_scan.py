@@ -27,6 +27,10 @@ OUT = Path("public")
 SPARK_BARS = 20   # bars shown in the tiny list thumbnail
 DETAIL_BARS = 63  # ~3 months, matches upstream CHARTS["bars"]
 
+# Must match export_backtest.py, or the app would show levels for a rule the
+# backtest never tested — which is exactly the drift this replaced.
+TRAIL_ATR_MULT = float(os.environ.get("TRAIL_ATR_MULT", "3.0"))
+
 
 def _num(v, nd=3):
     """Round for JSON, mapping NaN/inf to null so the chart can break the line."""
@@ -84,17 +88,40 @@ def _pct_change(df: pd.DataFrame) -> float:
     return round((last / prev - 1) * 100, 2)
 
 
-def _levels(e: pd.DataFrame) -> dict:
-    """Entry / stop suggestion. Entry = EMA20 (pullback reference),
-    stop = 1.5 ATR below last close. Purely informational, not advice."""
+def _levels(e: pd.DataFrame, stop_pct: float, mult: float) -> dict:
+    """Entry and stop for the rule the backtest actually validates.
+
+    These used to be their own invention — entry at EMA20 for a pullback, stop
+    at 1.5 ATR — neither of which any backtest had ever tested. The numbers on
+    screen now come from the same parameters the ATR replay uses, so what you
+    see when you tap a stock is the rule whose results you can go and read.
+
+    Entry is the next bar's open, matching the backtest, so the last close is
+    shown only as a reference price.
+    """
     try:
         row = e.iloc[-1]
         close = float(row["close"])
-        ema20 = float(row["ema20"])
         atr = (float(row["atr"]) if "atr" in e.columns and pd.notna(row.get("atr"))
                else close * 0.03)
-        return {"entry": round(min(close, ema20), 3),
-                "stop": round(close - 1.5 * atr, 3)}
+        if atr <= 0:
+            atr = close * 0.03
+
+        init_stop = close * (1 - stop_pct)      # the -7% floor
+        trail_dist = mult * atr
+        trail_stop = close - trail_dist
+        # On day one the fixed stop is usually tighter; the trail takes over
+        # only once it rises above. Show whichever is actually governing.
+        active = max(init_stop, trail_stop)
+        return {
+            "entry": round(close, 3),
+            "stop": round(active, 3),
+            "stop_init": round(init_stop, 3),
+            "trail_dist": round(trail_dist, 3),
+            "atr": round(atr, 4),
+            "stop_from": "trail" if trail_stop > init_stop else "initial",
+            "stop_pct_now": round((active / close - 1) * 100, 1),
+        }
     except Exception:
         return {}
 
@@ -144,6 +171,7 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
     print(f"{total} hits ({n_new} new), {n_logged} logged")
 
     names = _company_names(upstream)
+    stop_pct = abs(config.BACKTEST.get("stop_loss_pct", -7)) / 100
     now = datetime.now(timezone.utc)
     stocks, history = [], {}
 
@@ -173,7 +201,7 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
                 "change_pct": _pct_change(df),
                 "spark": _spark(e, SPARK_BARS),
             }
-            rec.update(_levels(e))
+            rec.update(_levels(e, stop_pct, TRAIL_ATR_MULT))
             stocks.append(rec)
             if sym not in history:
                 history[sym] = _series(e, DETAIL_BARS)
@@ -188,6 +216,11 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
         "new_hits": n_new,
         "strategies": [s for s in config.STRATEGIES
                        if config.STRATEGIES[s].get("enabled", True)],
+        "exit_rule": {
+            "label": f"ATR trail {TRAIL_ATR_MULT:g}x",
+            "mult": TRAIL_ATR_MULT,
+            "stop_pct": round(stop_pct * 100, 1),
+        },
         "stocks": stocks,
     }
 

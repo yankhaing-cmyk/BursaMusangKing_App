@@ -75,9 +75,10 @@ main{flex:1;min-height:0;padding:12px 16px 0;overflow-x:hidden;overflow-y:auto}
 .scroller::-webkit-scrollbar{display:none}
 .empty{padding:32px 0;text-align:center;color:var(--muted);font-size:13px}
 
-.chips{display:flex;gap:5px;overflow-x:auto;padding:8px 0 9px;scrollbar-width:none}
-.chips::-webkit-scrollbar{display:none}
-.chip{font-size:11px;padding:3px 9px;border-radius:var(--radius);white-space:nowrap;
+.chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;
+  padding:8px 0 9px}
+.chip{font-size:11px;padding:5px 6px;border-radius:var(--radius);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:center;
   border:.5px solid var(--line);color:var(--muted);background:none;cursor:pointer;
   font-family:inherit}
 .chip.on{background:var(--accent-bg);color:var(--accent);border-color:transparent;
@@ -145,7 +146,7 @@ html[data-theme="dark"] .v-warn{color:#e0a94a}
 .exitbar button.on{background:var(--accent-bg);color:var(--accent);
   border-color:transparent;font-weight:600}
 .exitrule{margin:-6px 0 11px;font-size:10.5px;color:var(--faint);line-height:1.45}
-.chipgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;
+.chipgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;
   padding:0 0 10px}
 .chipgrid .chip{padding:5px 4px;text-align:center;overflow:hidden;
   text-overflow:ellipsis;min-width:0}

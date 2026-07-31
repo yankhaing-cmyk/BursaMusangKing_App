@@ -10,6 +10,7 @@
     early_uptrend: "Early",
     reversal: "Reversal",
     gaining_momentum: "Momentum",
+    base_breakout: "Breakout",
   };
 
   const LABELS = {
@@ -17,6 +18,7 @@
     early_uptrend: "Early uptrend",
     reversal: "Reversal",
     gaining_momentum: "Momentum",
+    base_breakout: "Base breakout",
   };
 
   let latest = null, weekly = null, backtest = null;
@@ -146,7 +148,7 @@
 
     $("chips").innerHTML = strats.map((s) => `
       <button class="chip${s === filter ? " on" : ""}" data-s="${s}">
-        ${LABELS[s] || s}<span class="n">${counts[s] || 0}</span>
+        ${SHORT[s] || LABELS[s] || s}<span class="n">${counts[s] || 0}</span>
       </button>`).join("");
 
     $("chips").querySelectorAll(".chip").forEach((c) => {

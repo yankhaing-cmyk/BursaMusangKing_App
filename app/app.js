@@ -6,7 +6,7 @@
   const C = window.BMKChart;
 
   const SHORT = {
-    trending: "Trending",
+    trending: "Trend",
     early_uptrend: "Early",
     reversal: "Reversal",
     gaining_momentum: "Momentum",

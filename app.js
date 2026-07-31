@@ -10,6 +10,7 @@
     early_uptrend: "Early",
     reversal: "Reversal",
     gaining_momentum: "Momentum",
+    base_breakout: "Breakout",
   };
 
   const LABELS = {
@@ -17,20 +18,8 @@
     early_uptrend: "Early uptrend",
     reversal: "Reversal",
     gaining_momentum: "Momentum",
+    base_breakout: "Base breakout",
   };
-
-  const LIST_SORTS = [
-    ["change", "Change"], ["setup", "Setup"], ["vol", "Volume"], ["rsi", "RSI"],
-  ];
-  let listSort = "change";
-
-  /** Composite 0-100 read on the setup: trend strength (ADX), participation
-   *  (volume ratio), and RSI sitting in the productive band rather than
-   *  already overbought. Derived in the app — the scan does not publish it. */
-  const setupScore = (s) => Math.round(
-    Math.max(0, Math.min(40, (s.adx - 18) / 22 * 40)) +
-    Math.max(0, Math.min(30, (s.vol_ratio - 1) / 2 * 30)) +
-    (s.rsi >= 45 && s.rsi <= 68 ? 30 : s.rsi > 68 ? 14 : 20));
 
   let latest = null, weekly = null, backtest = null;
   let btStrat = null, btOpen = null, btKind = null, btSort = "best";
@@ -116,10 +105,8 @@
     try {
       latest = await get("/latest");
       renderChips();
-      renderSorts();
       renderList();
-      $("meta-sub").textContent =
-        `${latest.stocks_screened} screened · updated ${fmtTime(latest.generated_at)}`;
+      $("updated").textContent = "Updated " + fmtTime(latest.generated_at);
     } catch (e) {
       banner("Couldn't load scan results. " + e.message, "err");
       $("count").textContent = "";
@@ -148,22 +135,7 @@
   function visible() {
     if (!latest) return [];
     const all = latest.stocks || [];
-    const rows = (filter ? all.filter((s) => s.strategy === filter) : all).slice();
-    const by = {
-      change: (a, b) => b.change_pct - a.change_pct,
-      setup: (a, b) => setupScore(b) - setupScore(a),
-      vol: (a, b) => b.vol_ratio - a.vol_ratio,
-      rsi: (a, b) => b.rsi - a.rsi,
-    }[listSort];
-    return by ? rows.sort(by) : rows;
-  }
-
-  function renderSorts() {
-    $("sort").innerHTML = LIST_SORTS.map(([k, l]) =>
-      `<button class="sort${k === listSort ? " on" : ""}" data-s="${k}">${l}${k === listSort ? " ↓" : ""}</button>`).join("");
-    $("sort").querySelectorAll(".sort").forEach((b) => {
-      b.onclick = () => { listSort = b.dataset.s; renderSorts(); renderList(); };
-    });
+    return filter ? all.filter((s) => s.strategy === filter) : all;
   }
 
   function renderChips() {
@@ -176,7 +148,7 @@
 
     $("chips").innerHTML = strats.map((s) => `
       <button class="chip${s === filter ? " on" : ""}" data-s="${s}">
-        ${LABELS[s] || s}<span class="n">${counts[s] || 0}</span>
+        ${SHORT[s] || LABELS[s] || s}<span class="n">${counts[s] || 0}</span>
       </button>`).join("");
 
     $("chips").querySelectorAll(".chip").forEach((c) => {
@@ -193,7 +165,8 @@
     const rows = visible();
     const cur = latest.currency || "";
     $("count").textContent =
-      `${rows.length} match${rows.length === 1 ? "" : "es"}`;
+      `${rows.length} match${rows.length === 1 ? "" : "es"} · ` +
+      `${latest.stocks_screened} screened`;
 
     if (!rows.length) {
       $("list").innerHTML =
@@ -204,28 +177,18 @@
     $("list").innerHTML = rows.map((s, i) => {
       const dir = s.change_pct >= 0 ? "up" : "down";
       const sign = s.change_pct > 0 ? "+" : "";
-      const sc = setupScore(s);
-      // Stop distance from today's close — the risk you take on this row,
-      // which used to be one tap away inside the detail view.
-      const risk = (s.stop != null && s.close)
-        ? ` · stop ${(-(s.close - s.stop) / s.close * 100).toFixed(1)}%` : "";
       return `
       <div class="row" data-i="${i}">
-        <div class="row-main">
-          <div class="r-l1">
-            <p class="name">${esc(s.symbol)}${s.is_new ? '<span class="badge">NEW</span>' : ""}</p>
-            <p class="chg ${dir}">${sign}${s.change_pct}%</p>
-          </div>
-          <div class="r-l2">
-            <p class="sub">${s.name ? esc(s.name) + " · " : ""}RSI ${s.rsi} · ADX ${s.adx} · Vol ${s.vol_ratio}x</p>
-            <p class="px">${cur} ${s.close}</p>
-          </div>
-          <div class="r-l3">
-            <span class="r-bar"><i style="width:${sc}%"></i></span>
-            <span class="m">setup ${sc}${risk}</span>
-          </div>
-        </div>
         <div class="spark"><canvas id="sp${i}"></canvas></div>
+        <div class="row-mid">
+          <p class="name">${esc(s.symbol)}${s.is_new ? '<span class="badge">NEW</span>' : ""}</p>
+          ${s.name ? `<p class="co">${esc(s.name)}</p>` : ""}
+          <p class="sub">RSI ${s.rsi} · ADX ${s.adx} · Vol ${s.vol_ratio}x</p>
+        </div>
+        <div class="row-end">
+          <p class="chg ${dir}">${sign}${s.change_pct}%</p>
+          <p class="px">${cur} ${s.close}</p>
+        </div>
       </div>`;
     }).join("");
 
@@ -249,38 +212,23 @@
     const cur = latest.currency || "";
     const cat = (LABELS[s.strategy] || s.strategy).toUpperCase();
 
-    $("d-sym").textContent = s.symbol;
-    $("d-cat").textContent = cat;
-    $("d-co").textContent = s.name
-      || [latest.market_name, latest.market].filter(Boolean).join(" · ");
-    $("d-px").textContent = `${cur} ${s.close}`;
-    $("d-chg").className = "d-chg " + (s.change_pct >= 0 ? "up" : "down");
-    $("d-chg").textContent =
-      (s.change_pct > 0 ? "+" : "") + s.change_pct + "%";
-    $("m-rsi").textContent = s.rsi;
-    $("m-adx").textContent = s.adx;
-    $("m-vol").textContent = s.vol_ratio + "x";
-    $("m-roc").textContent = s.roc10 + "%";
-    $("m-roc").className = "v " + (s.roc10 >= 0 ? "up" : "down");
+    $("d-title").innerHTML =
+      `${esc(s.symbol)}<span class="sep">|</span>` +
+      `<span class="cat">${esc(cat)}</span><span class="sep">|</span>` +
+      `<span class="stat">${cur}${s.close}</span>` +
+      `<span class="stat">RSI ${s.rsi}</span>` +
+      `<span class="stat">ADX ${s.adx}</span>` +
+      `<span class="stat">Vol ${s.vol_ratio}x</span>` +
+      `<span class="stat">ROC10 ${s.roc10}%</span>`;
+    $("d-co").textContent = s.name || "";
     $("title").textContent = s.symbol;
     const ex = (latest && latest.exit_rule) || {};
     $("d-lvl-head").textContent = "Levels" + (ex.label ? ` · ${ex.label}` : "");
-    // Which stop is governing gets its own line in the panel header, so the
-    // long explanatory note is no longer the only place it is stated.
-    $("d-gov").textContent = s.stop == null ? ""
-      : (s.stop_from === "trail" ? "trailing stop governing"
-        : `${ex.stop_pct || 7}% fixed stop governing`);
     $("d-entry").textContent = s.entry != null
       ? `${cur} ${s.entry}` : "–";
-    $("d-stop").textContent = s.stop != null ? `${cur} ${s.stop}` : "–";
-    // Risk = how far the stop sits below today's close, as a percentage.
-    const riskPct = (s.stop != null && s.close)
-      ? -(s.close - s.stop) / s.close * 100
-      : (s.stop_pct_now != null ? s.stop_pct_now : null);
-    $("d-risk").textContent = riskPct == null ? "–" : riskPct.toFixed(1) + "%";
-    // Bar is scaled so a 10% stop fills it — deeper stops simply peg full.
-    $("riskbar-in").style.width =
-      riskPct == null ? "0" : Math.min(100, Math.abs(riskPct) * 10) + "%";
+    $("d-stop").textContent = s.stop != null
+      ? `${cur} ${s.stop}` + (s.stop_pct_now != null ? `  ${s.stop_pct_now}%` : "")
+      : "–";
     $("d-trail").textContent = s.trail_dist != null
       ? `${cur} ${s.trail_dist}` + (ex.mult ? `  (${ex.mult}× ATR14)` : "")
       : "–";
@@ -321,41 +269,30 @@
   function renderWeekly() {
     if (!weekly) return;
     const o = weekly.overall || {};
-    const sg = (v) => (v == null ? "–" : (v > 0 ? "+" : "") + v + "%");
+    const card = (l, v, cls) =>
+      `<div class="c"><p>${l}</p><p class="${cls || ""}">${v}</p></div>`;
 
-    // One headline number, then a thin rule of supporting stats — rather than
-    // four equal-weight cards that make win rate and "worst" look equivalent.
-    $("w-hero").innerHTML =
-      `<div><p class="k">Win rate</p><p class="big">${o.trades ? o.win_rate + "%" : "–"}</p></div>` +
-      `<div style="padding-bottom:4px"><p class="k">Profit factor</p>` +
-      `<p class="mid">${o.profit_factor ?? "–"}</p></div>` +
-      `<div style="padding-bottom:4px"><p class="k">Signals</p>` +
-      `<p class="mid">${o.trades || 0}</p></div>`;
-    const st = (k, v, cls) =>
-      `<div><p class="k">${k}</p><p class="v ${cls || ""}">${v}</p></div>`;
-    $("w-rule").innerHTML =
-      st("AVG", sg(o.avg), o.avg >= 0 ? "up" : "down") +
-      st("BEST", sg(o.best), "up") +
-      st("WORST", sg(o.worst), "down");
+    $("w-cards").innerHTML = o.trades
+      ? card("Win rate", o.win_rate + "%") +
+        card("Profit factor", o.profit_factor ?? "–") +
+        card("Signals", o.trades) +
+        card("Worst", o.worst + "%", "down")
+      : card("Win rate", "–") + card("Profit factor", "–") +
+        card("Signals", "0") + card("Worst", "–");
 
     $("w-curve-label").textContent =
       `Cumulative signal performance · last ${weekly.lookback_weeks} weeks`;
 
     $("w-strats").innerHTML = (weekly.strategies || []).map((s) => {
       const h = s.horizons || {};
-      // Three horizons as a fixed 3-cell row, so +5d/+10d/+20d line up down
-      // the page and can be compared across strategies at a glance.
-      const cells = [5, 10, 20].map((n) => {
-        const d = h[n];
-        if (!d) return `<div class="c"><p class="h">+${n}d</p><p class="w">–</p></div>`;
-        return `<div class="c"><p class="h">+${n}d · n=${d.n}</p>` +
-          `<p class="w">${d.win_rate}% win</p>` +
-          `<p class="a ${d.avg >= 0 ? "up" : "down"}">avg ${d.avg > 0 ? "+" : ""}${d.avg}%</p></div>`;
-      }).join("");
+      const line = (n) => h[n]
+        ? `+${n}d: ${h[n].win_rate}% win · avg ${h[n].avg > 0 ? "+" : ""}${h[n].avg}% (n=${h[n].n})`
+        : null;
+      const parts = [5, 10, 20].map(line).filter(Boolean);
       return `<div class="strat-block">
         <h3>${LABELS[s.strategy] || s.strategy} — ${s.signals} new signals</h3>
-        <div class="hz">${cells}</div>
-        <p class="ex">best ${esc(s.best.symbol)} ${s.best.ret > 0 ? "+" : ""}${s.best.ret}% ·
+        ${parts.map((p) => `<p class="l">${p}</p>`).join("")}
+        <p class="l">best ${esc(s.best.symbol)} ${s.best.ret > 0 ? "+" : ""}${s.best.ret}% ·
            worst ${esc(s.worst.symbol)} ${s.worst.ret > 0 ? "+" : ""}${s.worst.ret}%</p>
       </div>`;
     }).join("") || `<p class="empty">${esc(weekly.note
@@ -708,8 +645,9 @@
     ["list", "detail", "weekly", "backtest"].forEach((x) => {
       $("view-" + x).hidden = x !== v;
     });
-    // The chip grid sits outside <main>, so it needs hiding explicitly.
+    // Both of these sit outside <main>, so they need hiding explicitly.
     $("bt-chips").hidden = v !== "backtest" || !backtest;
+    $("run").hidden = v !== "list";
     document.querySelectorAll("nav button").forEach((b) => {
       b.classList.toggle("on", b.dataset.view === v ||
         (v === "detail" && b.dataset.view === "list"));
@@ -788,6 +726,9 @@
     banner("Demo mode — showing sample data. Set WORKER_URL in config.js "
          + "to connect your live scans.");
   }
+  // Run the view switcher once at startup so header controls match the
+  // opening view — otherwise they only settle after the first nav tap.
+  show("list");
   loadAll();
 
   // Register the shell cache, and reload once when a new worker takes over so

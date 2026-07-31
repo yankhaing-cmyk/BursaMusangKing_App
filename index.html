@@ -33,8 +33,13 @@ header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon-btn{background:none;border:0;color:var(--muted);font-size:19px;cursor:pointer;
   padding:4px;line-height:1}
-main{flex:1;min-height:0;padding:12px 16px 0;overflow-x:hidden;overflow-y:auto;
-  display:flex;flex-direction:column}
+.hdr-actions{display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.run-btn{font:inherit;font-size:12px;font-weight:600;padding:5px 11px;
+  border-radius:var(--radius);border:.5px solid var(--line);background:none;
+  color:var(--text);cursor:pointer;white-space:nowrap;line-height:1.3}
+.run-btn:active{transform:scale(.96)}
+.run-btn:disabled{opacity:.5;cursor:default}
+main{flex:1;min-height:0;padding:12px 16px 0;overflow-x:hidden;overflow-y:auto}
 .meta{margin:0 0 6px;font-size:12px;color:var(--muted)}
 .banner{display:none;margin:0 0 10px;padding:8px 12px;border-radius:var(--radius);
   background:var(--accent-bg);color:var(--accent);font-size:12.5px}
@@ -61,18 +66,19 @@ main{flex:1;min-height:0;padding:12px 16px 0;overflow-x:hidden;overflow-y:auto;
   vertical-align:1px}
 
 .scroller{overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-/* The screener list takes exactly the space left over after the fixed control
-   bar, so there is never a dead band above the nav. */
-#view-list{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
-#view-detail,#view-weekly,#view-backtest{flex:0 0 auto}
+/* The screener list takes exactly the space left over after the chips and the
+   scan button, so there is never a dead band above the nav. */
+#view-list{display:flex;flex-direction:column;height:100%;min-height:0}
 #view-list .scroller{flex:1 1 auto;min-height:0}
-#view-list .listbar,#view-list .chips{flex:0 0 auto}
+#view-list .chips,#view-list #count,#view-list #updated{flex:0 0 auto}
+#view-list .chips{padding-bottom:12px}
 .scroller::-webkit-scrollbar{display:none}
 .empty{padding:32px 0;text-align:center;color:var(--muted);font-size:13px}
 
-.chips{display:flex;gap:5px;overflow-x:auto;padding:8px 0 9px;scrollbar-width:none}
-.chips::-webkit-scrollbar{display:none}
-.chip{font-size:11px;padding:3px 9px;border-radius:var(--radius);white-space:nowrap;
+.chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;
+  padding:8px 0 9px}
+.chip{font-size:11px;padding:5px 6px;border-radius:var(--radius);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:center;
   border:.5px solid var(--line);color:var(--muted);background:none;cursor:pointer;
   font-family:inherit}
 .chip.on{background:var(--accent-bg);color:var(--accent);border-color:transparent;
@@ -140,7 +146,7 @@ html[data-theme="dark"] .v-warn{color:#e0a94a}
 .exitbar button.on{background:var(--accent-bg);color:var(--accent);
   border-color:transparent;font-weight:600}
 .exitrule{margin:-6px 0 11px;font-size:10.5px;color:var(--faint);line-height:1.45}
-.chipgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;
+.chipgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;
   padding:0 0 10px}
 .chipgrid .chip{padding:5px 4px;text-align:center;overflow:hidden;
   text-overflow:ellipsis;min-width:0}
@@ -177,76 +183,6 @@ html[data-theme="dark"] .v-warn{color:#e0a94a}
   font-size:11px;color:var(--muted);line-height:1.7;word-break:break-word}
 .disclaimer{font-size:11px;color:var(--faint);padding:4px 0 18px;line-height:1.55}
 
-/* ---------------- 2a layout: fixed controls, scannable rows ---------------- */
-.sub-h{margin:1px 0 0;font-size:11px;color:var(--faint)}
-.head-actions{display:flex;align-items:center;gap:2px;flex:0 0 auto}
-.hbtn{background:none;border:.5px solid var(--line);border-radius:var(--radius);
-  color:var(--accent);font-family:inherit;font-size:11.5px;font-weight:600;
-  line-height:1;white-space:nowrap;cursor:pointer;padding:7px 10px}
-.hbtn:disabled{opacity:.55;cursor:default}
-.listbar{background:var(--card);padding-bottom:8px}
-#view-list .chips{border-top:.5px solid var(--line);padding:9px 0 4px;margin-top:2px}
-.countrow{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
-  padding:9px 0 0}
-.row .spark{height:38px}
-.row-main{flex:1;min-width:0}
-.r-l1,.r-l2{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-.row-main .name{margin:0;font-size:14px;font-weight:600;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis}
-.row-main .chg{margin:0;font-size:14px;font-weight:600;flex:0 0 auto}
-.row-main .sub{margin:0;font-size:11.5px;color:var(--muted);white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis}
-.row-main .px{margin:0;font-size:11.5px;color:var(--faint);flex:0 0 auto}
-.r-l3{display:flex;align-items:center;gap:7px;margin-top:5px}
-.r-bar{flex:1;height:3px;border-radius:2px;background:var(--line);overflow:hidden}
-.r-bar i{display:block;height:3px;background:var(--accent)}
-.r-l3 .m{font-size:10px;color:var(--faint);flex:0 0 auto}
-
-.dbar{display:flex;align-items:center;gap:8px;margin:-12px -16px 12px;
-  padding:10px 12px;border-bottom:.5px solid var(--line);background:var(--card)}
-.dbar .sym{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
-.tagline{display:flex;align-items:center;gap:7px}
-.tag{padding:1px 6px;border-radius:5px;background:var(--accent-bg);
-  color:var(--accent);font-size:9.5px;font-weight:600}
-.dbar .pxwrap{margin:0;text-align:right;flex:0 0 auto}
-.dbar .d-px{font-size:16px;font-weight:600}
-.dbar .d-chg{font-size:11.5px;font-weight:600}
-.mstrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
-  background:var(--bg);border-radius:var(--radius);padding:10px 0;margin-bottom:12px}
-.mstrip div{text-align:center}
-.mstrip div+div{border-left:.5px solid var(--line)}
-.mstrip .k{margin:0;font-size:10px;color:var(--faint);letter-spacing:.02em}
-.mstrip .v{margin:0;font-size:14.5px;font-weight:600}
-.panel .phead{display:flex;align-items:baseline;justify-content:space-between;
-  margin-bottom:9px}
-.panel .phead p{margin:0}
-.panel .gov{font-size:11px;color:var(--faint)}
-.lv3{display:flex;gap:10px;margin-bottom:10px}
-.lv3 div{flex:1}
-.lv3 .k{margin:0;font-size:10px;color:var(--faint)}
-.lv3 .v{margin:0;font-size:16px;font-weight:600}
-.riskbar{position:relative;height:6px;border-radius:3px;
-  background:rgba(208,59,59,.16);overflow:hidden;margin-bottom:8px}
-.riskbar i{position:absolute;left:0;top:0;bottom:0;background:var(--down);opacity:.55}
-
-.whero{display:flex;align-items:flex-end;gap:18px;margin-bottom:12px}
-.whero .k{margin:0;font-size:11px;color:var(--muted)}
-.whero .big{margin:-2px 0 0;font-size:34px;font-weight:600;letter-spacing:-.02em;
-  line-height:1.1}
-.whero .mid{margin:0;font-size:21px;font-weight:600}
-.wrule{display:flex;border-top:.5px solid var(--line);
-  border-bottom:.5px solid var(--line);padding:9px 0;margin-bottom:14px}
-.wrule div{flex:1}
-.wrule .k{margin:0;font-size:10px;color:var(--faint)}
-.wrule .v{margin:0;font-size:13.5px;font-weight:600}
-.hz{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.hz .c{background:var(--bg);border-radius:8px;padding:6px 8px}
-.hz .c p{margin:0}
-.hz .h{font-size:10px;color:var(--faint)}
-.hz .w{font-size:13px;font-weight:600}
-.hz .a{font-size:10.5px}
-.strat-block .ex{margin:5px 0 0;font-size:11px;color:var(--faint)}
-
 nav{position:sticky;bottom:0;display:flex;background:var(--card);
   border-top:.5px solid var(--line);
   padding-bottom:env(safe-area-inset-bottom)}
@@ -261,12 +197,9 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
 <body>
 <div id="app">
   <header>
-    <div style="min-width:0">
-      <h1 id="title">BursaMusangKing</h1>
-      <p class="sub-h" id="meta-sub"></p>
-    </div>
-    <div class="head-actions">
-      <button class="hbtn" id="run">▶ Scan</button>
+    <h1 id="title">BursaMusangKing</h1>
+    <div class="hdr-actions">
+      <button class="run-btn" id="run" hidden>▶ Run</button>
       <button class="icon-btn" id="theme" aria-label="Toggle dark mode">◐</button>
     </div>
   </header>
@@ -276,50 +209,26 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
 
     <!-- ============ list view ============ -->
     <section id="view-list">
-      <div class="listbar">
-        <div class="countrow">
-          <p class="meta" id="count" style="margin:0">Loading…</p>
-          <div class="sortbar" id="sort" style="padding:0"></div>
-        </div>
-      </div>
+      <p class="meta" id="count">Loading…</p>
       <div class="scroller"><div id="list"></div></div>
+      <p class="meta" id="updated" style="text-align:center;margin:8px 0"></p>
       <div class="chips" id="chips"></div>
     </section>
 
     <!-- ============ detail view ============ -->
     <section id="view-detail" hidden>
-      <div class="dbar">
-        <button class="icon-btn" id="back" aria-label="Back">←</button>
+      <div class="detail-head">
+        <button class="icon-btn" id="back" aria-label="Back" style="margin-left:-4px">←</button>
         <div style="flex:1;min-width:0">
-          <div class="tagline">
-            <p class="sym" id="d-sym"></p>
-            <span class="tag" id="d-cat"></span>
-          </div>
+          <p class="d-title" id="d-title"></p>
           <p class="d-co" id="d-co"></p>
         </div>
-        <p class="pxwrap">
-          <span class="d-px" id="d-px"></span><br>
-          <span class="d-chg" id="d-chg"></span>
-        </p>
-      </div>
-      <div class="mstrip">
-        <div><p class="k">RSI</p><p class="v" id="m-rsi">–</p></div>
-        <div><p class="k">ADX</p><p class="v" id="m-adx">–</p></div>
-        <div><p class="k">VOL</p><p class="v" id="m-vol">–</p></div>
-        <div><p class="k">ROC10</p><p class="v" id="m-roc">–</p></div>
       </div>
       <div class="chart-wrap"><canvas id="d-chart"></canvas></div>
       <div class="panel">
-        <div class="phead">
-          <p class="h" id="d-lvl-head">Levels</p>
-          <p class="gov" id="d-gov"></p>
-        </div>
-        <div class="lv3">
-          <div><p class="k">ENTRY</p><p class="v" id="d-entry">–</p></div>
-          <div><p class="k">STOP TODAY</p><p class="v down" id="d-stop">–</p></div>
-          <div><p class="k">RISK</p><p class="v" id="d-risk">–</p></div>
-        </div>
-        <div class="riskbar"><i id="riskbar-in" style="width:0"></i></div>
+        <p class="h" id="d-lvl-head">Levels</p>
+        <div class="kv"><span style="color:var(--muted)">Entry</span><b id="d-entry">–</b></div>
+        <div class="kv"><span style="color:var(--muted)">Stop today</span><b id="d-stop" class="down">–</b></div>
         <div class="kv"><span style="color:var(--muted)">Trail distance</span><b id="d-trail">–</b></div>
         <p class="lvl-note" id="d-lvl-note"></p>
       </div>
@@ -329,8 +238,7 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
 
     <!-- ============ weekly view ============ -->
     <section id="view-weekly" hidden>
-      <div class="whero" id="w-hero"></div>
-      <div class="wrule" id="w-rule"></div>
+      <div class="cards" id="w-cards"></div>
       <p class="meta" id="w-curve-label">Equity curve</p>
       <div class="chart-wrap" style="margin-bottom:6px">
         <canvas id="w-chart" style="height:150px"></canvas>

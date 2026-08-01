@@ -9,214 +9,59 @@
 <link rel="icon" href="icon-192.png">
 <style>
 :root{
-  --bg:#f7f7f5; --card:#ffffff; --text:#111110; --muted:#6b6a66; --faint:#9a9994;
-  --line:rgba(17,17,16,.12); --accent:#2a78d6; --accent-bg:#e6f1fb;
-  --up:#0ca30c; --down:#d03b3b; --radius:10px;
+  --bg:#f7f7f5;--card:#fff;--text:#111110;--muted:#6b6a66;--faint:#9a9994;
+  --line:rgba(17,17,16,.12);--accent:#2a78d6;--accent-bg:#e6f1fb;
+  --up:#0b9b45;--down:#d03b3b;--warn:#b8791a;--radius:10px
 }
 html[data-theme="dark"]{
-  --bg:#111110; --card:#1c1c1a; --text:#f2f2ef; --muted:#a3a29c; --faint:#7a7975;
-  --line:rgba(255,255,255,.13); --accent:#5b9cea; --accent-bg:#12283f;
-  --up:#3fbe3f; --down:#e26363;
+  --bg:#111110;--card:#1c1c1a;--text:#f2f2ef;--muted:#a3a29c;--faint:#7a7975;
+  --line:rgba(255,255,255,.13);--accent:#5b9cea;--accent-bg:#12283f;
+  --up:#43c878;--down:#e26363;--warn:#dc9d3d
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
-body{margin:0;background:var(--bg);color:var(--text);
-  font:400 15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  overscroll-behavior-y:contain}
-#app{max-width:520px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;
-  background:var(--card)}
-header{position:sticky;top:0;z-index:10;background:var(--card);
-  border-bottom:.5px solid var(--line);padding:14px 16px 10px;
-  padding-top:calc(14px + env(safe-area-inset-top));
-  display:flex;align-items:center;justify-content:space-between;gap:10px}
-header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.icon-btn{background:none;border:0;color:var(--muted);font-size:19px;cursor:pointer;
-  padding:4px;line-height:1}
-.hdr-actions{display:flex;align-items:center;gap:9px;flex:0 0 auto}
-.run-btn{font:inherit;font-size:12px;font-weight:600;padding:5px 11px;
-  border-radius:var(--radius);border:.5px solid var(--line);background:none;
-  color:var(--text);cursor:pointer;white-space:nowrap;line-height:1.3}
-.run-btn:active{transform:scale(.96)}
-.run-btn:disabled{opacity:.5;cursor:default}
-main{flex:1;min-height:0;padding:12px 16px 0;overflow-x:hidden;overflow-y:auto}
-.meta{margin:0 0 6px;font-size:12px;color:var(--muted)}
-.banner{display:none;margin:0 0 10px;padding:8px 12px;border-radius:var(--radius);
-  background:var(--accent-bg);color:var(--accent);font-size:12.5px}
-.banner.show{display:block}
-.banner.err{background:rgba(208,59,59,.12);color:var(--down)}
-.row{display:flex;align-items:center;gap:10px;padding:9px 0;
-  border-bottom:.5px solid var(--line);cursor:pointer}
-.row:last-child{border-bottom:0}
-.spark{width:58px;height:34px;flex:0 0 auto}
-.spark canvas{width:100%;height:100%;display:block}
-.row-mid{flex:1;min-width:0}
-.row-mid .name{margin:0;font-size:13.5px;font-weight:600;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row-mid .co{margin:0;font-size:11px;color:var(--faint);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row-mid .sub{margin:0;font-size:11.5px;color:var(--muted)}
-.row-end{text-align:right;flex:0 0 auto}
-.row-end .chg{margin:0;font-size:13.5px;font-weight:600}
-.row-end .px{margin:0;font-size:11.5px;color:var(--faint)}
-.up{color:var(--up)} .down{color:var(--down)}
-.badge{display:inline-block;margin-left:5px;padding:1px 5px;border-radius:5px;
-  background:var(--accent-bg);color:var(--accent);font-size:9.5px;font-weight:600;
-  vertical-align:1px}
-.scroller{overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-/* The screener list takes exactly the space left over after the chips and the
-   scan button, so there is never a dead band above the nav. */
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:400 15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overscroll-behavior-y:contain}
+button{font:inherit}
+#app{max-width:520px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;background:var(--card);box-shadow:0 0 30px rgba(0,0,0,.05)}
+header{flex:0 0 auto;z-index:10;background:var(--card);border-bottom:.5px solid var(--line);padding:14px 16px 10px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;gap:10px}
+header h1{margin:0;font-size:16px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr-actions{display:flex;align-items:center;gap:8px}
+.icon-btn,.run-btn{border:0;background:none;color:var(--muted);cursor:pointer}
+.icon-btn{font-size:19px;padding:4px;line-height:1}
+.run-btn{font-size:12px;font-weight:650;padding:5px 11px;border:.5px solid var(--line);border-radius:var(--radius);color:var(--text)}
+.run-btn:disabled{opacity:.45}
+main{flex:1 1 auto;min-height:0;overflow:auto;padding:0 16px;scrollbar-width:none}
+main::-webkit-scrollbar,.scroller::-webkit-scrollbar{display:none}
+section{min-height:100%}
 #view-list{display:flex;flex-direction:column;height:100%;min-height:0}
-#view-list .scroller{flex:1 1 auto;min-height:0}
-#view-list .chips,#view-list #count,#view-list #updated{flex:0 0 auto}
-#view-list .chips{padding-bottom:12px}
-.scroller::-webkit-scrollbar{display:none}
-.empty{padding:32px 0;text-align:center;color:var(--muted);font-size:13px}
-
-/* Five compact screener tabs in one row. */
-.chips{
-  display:grid;
-  grid-template-columns:repeat(5,minmax(0,1fr));
-  gap:4px;
-  padding:8px 0 9px;
-  overflow:visible;
-}
-.chip{
-  width:100%;
-  min-width:0;
-  padding:4px 1px;
-  border-radius:var(--radius);
-  border:.5px solid var(--line);
-  color:var(--muted);
-  background:none;
-  cursor:pointer;
-  font-family:inherit;
-  font-size:10px;
-  line-height:1.25;
-  letter-spacing:-.02em;
-  text-align:center;
-  white-space:nowrap;
-  overflow:hidden;
-}
-.chip.on{
-  background:var(--accent-bg);
-  color:var(--accent);
-  border-color:transparent;
-  font-weight:600;
-}
-.chip .n{opacity:.65;margin-left:2px}
-@media(max-width:400px){
-  .chip{font-size:9px;padding-left:0;padding-right:0}
-  .chip .n{margin-left:1px}
-}
-@media(max-width:350px){
-  .chip{font-size:8px}
-}
-
-.primary{width:100%;margin-bottom:14px;padding:11px;border-radius:var(--radius);
-  border:.5px solid var(--line);background:none;color:var(--text);font:inherit;
-  font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;
-  justify-content:center;gap:7px}
-.primary:active{transform:scale(.985)}
-.primary:disabled{opacity:.55;cursor:default}
-.detail-head{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
-.d-title{margin:0;font-size:13px;font-weight:700;line-height:1.5;
-  letter-spacing:-.01em}
-.d-title .sep{color:var(--faint);font-weight:400;margin:0 5px}
-.d-title .cat{color:var(--accent)}
-.d-title .stat{font-weight:600;color:var(--muted);font-size:12px;
-  margin-right:9px;white-space:nowrap}
-.d-co{margin:2px 0 0;font-size:12px;color:var(--faint)}
-.chart-wrap{position:relative;margin:4px -6px 12px}
-.chart-wrap canvas{width:100%;display:block}
-.panel{background:var(--bg);border-radius:var(--radius);padding:11px 13px;
-  margin-bottom:14px}
-.panel .h{margin:0 0 7px;font-size:12px;color:var(--muted)}
-.panel .kv{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
-.panel .kv:last-child{margin-bottom:0}
-.panel .kv b{font-weight:600}
-.panel .lvl-note{margin:8px 0 0;font-size:10.5px;color:var(--faint);
-  line-height:1.5}
-.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;
-  margin-bottom:16px}
-.cards .c{background:var(--bg);border-radius:var(--radius);padding:11px 13px}
-.cards .c p:first-child{margin:0;font-size:12px;color:var(--muted)}
-.cards .c p:last-child{margin:0;font-size:21px;font-weight:600}
-.strat-block{border-top:.5px solid var(--line);padding:11px 0}
-.strat-block h3{margin:0 0 5px;font-size:13.5px;font-weight:600}
-.strat-block .l{margin:0;font-size:12px;color:var(--muted)}
-.bt-tbl{border:.5px solid var(--line);border-radius:var(--radius);overflow:hidden;
-  margin-bottom:12px}
-.bt-hd,.bt-row{display:grid;grid-template-columns:1fr 66px 84px;padding:7px 10px}
-.bt-hd{background:var(--bg);padding:7px 10px}
-.bt-hd span{font-size:11px;color:var(--faint)}
-.bt-hd .te{color:var(--accent);font-weight:600}
-.bt-row{border-top:.5px solid var(--line);font-size:13px}
-.bt-row .tr{text-align:right;color:var(--muted)}
-.bt-row .te{text-align:right;font-weight:600}
-.tap{color:var(--accent);cursor:pointer;text-decoration:underline;
-  text-decoration-style:dotted;text-underline-offset:3px}
-.tap.on{color:var(--text)}
-.verdict{border-radius:var(--radius);padding:9px 11px;margin-bottom:14px;
-  font-size:12px;line-height:1.5;display:flex;gap:8px;align-items:flex-start}
-.v-good{background:rgba(12,163,12,.12);color:var(--up)}
-.v-warn{background:rgba(240,160,44,.14);color:#b8791a}
-.v-bad{background:rgba(208,59,59,.12);color:var(--down)}
-.v-thin{background:var(--bg);color:var(--muted)}
-html[data-theme="dark"] .v-warn{color:#e0a94a}
-.exitbar{display:flex;gap:5px;margin-bottom:11px}
-.exitbar button{flex:1;text-align:center;padding:6px 4px;font-size:11.5px;
-  border-radius:var(--radius);border:.5px solid var(--line);background:none;
-  color:var(--muted);font-family:inherit;cursor:pointer;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;min-width:0}
-.exitbar button.on{background:var(--accent-bg);color:var(--accent);
-  border-color:transparent;font-weight:600}
-.exitrule{margin:-6px 0 11px;font-size:10.5px;color:var(--faint);line-height:1.45}
-.chipgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;
-  padding:0 0 10px}
-.chipgrid .chip{padding:5px 1px;text-align:center;overflow:hidden;
-  min-width:0}
-.sortbar{display:flex;gap:5px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
-.sortbar::-webkit-scrollbar{display:none}
-.sort{font-size:10.5px;padding:3px 8px;border-radius:var(--radius);white-space:nowrap;
-  border:.5px solid var(--line);color:var(--muted);background:none;cursor:pointer;
-  font-family:inherit}
-.sort.on{background:var(--accent-bg);color:var(--accent);border-color:transparent;
-  font-weight:600}
-.tl-row{display:block;border-bottom:.5px solid var(--line);padding:7px 2px}
-.tl-l1,.tl-l2{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.tl-l1 .sym{font-size:12.5px;font-weight:600;min-width:0;overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap}
-.tl-l1 .why{font-size:9.5px;font-weight:500;color:var(--faint);
-  text-transform:uppercase;letter-spacing:.02em;margin-left:3px}
-.tl-l1 .ret{font-size:12.5px;font-weight:600;flex:0 0 auto}
-.tl-l2 .dt{font-size:10.5px;color:var(--faint);white-space:nowrap;flex:0 0 auto}
-.tl-l2 .con{font-size:10.5px;color:var(--muted);text-align:right;min-width:0;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sg-row{border-bottom:.5px solid var(--line);padding:8px 2px}
-.sg-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.sg-top .sym{font-size:13px;font-weight:600}
-.sg-top .d{font-size:10.5px;color:var(--faint);flex:0 0 auto}
-.sg-co{margin:0;font-size:11px;color:var(--faint);white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis}
-.sg-h{display:flex;gap:12px;margin-top:3px}
-.sg-h span{font-size:11px;color:var(--muted)}
-.sg-h b{font-weight:600}
-.pend{display:inline-block;padding:1px 6px;border-radius:5px;background:var(--bg);
-  color:var(--faint);font-size:9.5px;font-weight:600}
-.cfg{border:.5px solid var(--line);border-radius:var(--radius);padding:9px 11px;
-  margin-bottom:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-  font-size:11px;color:var(--muted);line-height:1.7;word-break:break-word}
-.disclaimer{font-size:11px;color:var(--faint);padding:4px 0 18px;line-height:1.55}
-nav{position:sticky;bottom:0;display:flex;background:var(--card);
-  border-top:.5px solid var(--line);
-  padding-bottom:env(safe-area-inset-bottom)}
-nav button{flex:1;border:0;background:none;color:var(--muted);font:inherit;
-  font-size:11px;padding:9px 0;display:flex;flex-direction:column;align-items:center;
-  gap:3px;cursor:pointer}
-nav button.on{color:var(--accent)}
-nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
-  stroke-linecap:round;stroke-linejoin:round}
+#view-list .scroller{flex:1 1 auto;min-height:0;overflow:auto}
+.meta{font-size:11px;color:var(--faint);margin:10px 0 5px}
+.banner{display:none;margin:9px 0;padding:8px 10px;border-radius:var(--radius);background:var(--accent-bg);color:var(--accent);font-size:11.5px}
+.banner.show{display:block}.banner.err{background:rgba(208,59,59,.12);color:var(--down)}
+.row{width:100%;border:0;border-bottom:.5px solid var(--line);background:none;color:inherit;padding:10px 0;display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer}
+.spark{width:76px;height:44px;flex:0 0 76px;display:block}.spark canvas{width:76px;height:44px;display:block}
+.row-mid{min-width:0;flex:1;display:flex;flex-direction:column}.name{font-size:14px;font-weight:680}.co{font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sub{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-end{text-align:right;flex:0 0 auto;display:flex;flex-direction:column}.chg{font-size:13px;font-weight:650}.px{font-size:11px;color:var(--faint)}
+.up{color:var(--up)!important}.down{color:var(--down)!important}.faint{color:var(--faint)!important}
+.badge,.pend{display:inline-block;margin-left:5px;padding:1px 5px;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-size:9px;font-weight:700;vertical-align:1px}
+.empty{text-align:center;color:var(--muted);font-size:12px;margin:28px 0}
+.chips,.chipgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:8px 0 12px;background:var(--card)}
+.chipgrid{padding-top:7px;border-top:.5px solid var(--line);flex:0 0 auto}
+.chip{min-width:0;border:.5px solid var(--line);border-radius:8px;background:none;color:var(--muted);padding:5px 2px 4px;cursor:pointer;font-size:9.5px;line-height:1.1;display:flex;flex-direction:column;align-items:center;gap:2px;overflow:hidden}
+.chip span:first-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chip .n{font-size:9px;color:var(--faint)}.chip.on{background:var(--accent-bg);border-color:transparent;color:var(--accent);font-weight:700}.chip.on .n{color:var(--accent)}
+.detail-head{display:flex;align-items:flex-start;gap:8px;margin:12px 0 7px}.d-title{margin:0;font-size:13px;font-weight:700;line-height:1.6}.d-title .sep{color:var(--faint);font-weight:400;margin:0 5px}.d-title .cat{color:var(--accent)}.d-title .stat{font-size:11px;color:var(--muted);margin-right:8px;white-space:nowrap}.d-co{margin:2px 0 0;font-size:11px;color:var(--faint)}
+.chart-wrap{position:relative;margin:4px 0 13px}.chart-wrap canvas{width:100%;height:260px;display:block}.chart-wrap canvas#w-chart,.chart-wrap canvas#bt-chart{height:150px}
+.panel{background:var(--bg);border-radius:var(--radius);padding:11px 13px;margin-bottom:14px}.panel .h{margin:0 0 7px;font-size:12px;color:var(--muted)}.kv{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}.lvl-note{margin:8px 0 0;font-size:10.5px;color:var(--faint)}
+.disclaimer{font-size:10.5px;color:var(--faint);line-height:1.5;margin:10px 0 18px}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0 16px}.cards .c{background:var(--bg);border-radius:var(--radius);padding:10px 12px}.cards .c p{margin:0}.cards .c p:first-child{font-size:11px;color:var(--muted)}.cards .c p:last-child{font-size:20px;font-weight:650}
+.strat-block{border-top:.5px solid var(--line);padding:11px 0}.strat-block h3{margin:0 0 5px;font-size:13px}.strat-block .l{margin:2px 0;font-size:11.5px;color:var(--muted)}
+.sortbar,.exitbar{display:flex;gap:5px;overflow:auto;padding:3px 0 8px}.sort,.exitbar button{font-size:10.5px;padding:4px 8px;border-radius:8px;border:.5px solid var(--line);color:var(--muted);background:none;white-space:nowrap;cursor:pointer}.sort.on,.exitbar button.on{background:var(--accent-bg);color:var(--accent);border-color:transparent;font-weight:700}.exitrule{margin:-3px 0 10px;font-size:10.5px;color:var(--faint)}
+.sg-row,.tl-row{border-bottom:.5px solid var(--line);padding:8px 1px}.sg-top,.tl-l1,.tl-l2{display:flex;align-items:baseline;justify-content:space-between;gap:8px}.sg-top .sym,.tl-l1 .sym{font-size:12.5px;font-weight:650}.sg-top .d,.tl-l2 .dt{font-size:10.5px;color:var(--faint)}.sg-co{margin:1px 0;font-size:10.5px;color:var(--faint)}.sg-h{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:3px}.why{font-size:9px;color:var(--faint);text-transform:uppercase}.ret{font-size:12.5px;font-weight:650}
+.bt-tbl{border:.5px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}.bt-hd,.bt-row{display:grid;grid-template-columns:1fr 66px 84px;padding:7px 10px}.bt-hd{background:var(--bg)}.bt-hd span{font-size:11px;color:var(--faint)}.bt-hd .te{color:var(--accent);font-weight:700}.bt-row{border-top:.5px solid var(--line);font-size:13px}.bt-row .tr{text-align:right;color:var(--muted)}.bt-row .te{text-align:right;font-weight:650}.tap{border:0;background:none;color:var(--accent);cursor:pointer;padding:0;text-decoration:underline dotted;text-underline-offset:3px}
+.verdict{border-radius:var(--radius);padding:9px 11px;margin-bottom:13px;font-size:11.5px;line-height:1.5;display:flex;gap:8px}.v-good{background:rgba(12,163,12,.12);color:var(--up)}.v-warn{background:rgba(240,160,44,.14);color:var(--warn)}.v-bad{background:rgba(208,59,59,.12);color:var(--down)}.v-thin{background:var(--bg);color:var(--muted)}
+#bt-panel{max-height:0;overflow:hidden;transition:max-height .22s ease}#bt-panel.open{max-height:600px}.cfg{white-space:pre-wrap;background:var(--bg);border-radius:var(--radius);padding:10px;font-size:10px;color:var(--muted);word-break:break-word;margin-bottom:8px}
+nav{flex:0 0 auto;display:flex;background:var(--card);border-top:.5px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}nav button{flex:1;border:0;background:none;color:var(--muted);font-size:11px;padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}nav button.on{color:var(--accent)}nav svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:390px){.chips,.chipgrid{gap:3px}.chip{font-size:8.8px;padding-left:1px;padding-right:1px}.spark{width:68px;flex-basis:68px}.spark canvas{width:68px}.row{gap:8px}}
 </style>
 </head>
 <body>
@@ -231,22 +76,17 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
   <main>
     <div class="banner" id="banner"></div>
 
-    <!-- ============ list view ============ -->
     <section id="view-list">
       <p class="meta" id="count">Loading…</p>
       <div class="scroller"><div id="list"></div></div>
-      <p class="meta" id="updated" style="text-align:center;margin:8px 0"></p>
+      <p class="meta" id="updated" style="text-align:center;margin:7px 0"></p>
       <div class="chips" id="chips"></div>
     </section>
 
-    <!-- ============ detail view ============ -->
     <section id="view-detail" hidden>
       <div class="detail-head">
-        <button class="icon-btn" id="back" aria-label="Back" style="margin-left:-4px">←</button>
-        <div style="flex:1;min-width:0">
-          <p class="d-title" id="d-title"></p>
-          <p class="d-co" id="d-co"></p>
-        </div>
+        <button class="icon-btn" id="back" aria-label="Back">←</button>
+        <div style="flex:1;min-width:0"><p class="d-title" id="d-title"></p><p class="d-co" id="d-co"></p></div>
       </div>
       <div class="chart-wrap"><canvas id="d-chart"></canvas></div>
       <div class="panel">
@@ -256,17 +96,13 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
         <div class="kv"><span style="color:var(--muted)">Trail distance</span><b id="d-trail">–</b></div>
         <p class="lvl-note" id="d-lvl-note"></p>
       </div>
-      <p class="disclaimer">Not financial advice — size positions so the worst
-        case is survivable.</p>
+      <p class="disclaimer">Not financial advice — size positions so the worst case is survivable.</p>
     </section>
 
-    <!-- ============ weekly view ============ -->
     <section id="view-weekly" hidden>
       <div class="cards" id="w-cards"></div>
       <p class="meta" id="w-curve-label">Equity curve</p>
-      <div class="chart-wrap" style="margin-bottom:6px">
-        <canvas id="w-chart" style="height:150px"></canvas>
-      </div>
+      <div class="chart-wrap"><canvas id="w-chart"></canvas></div>
       <div id="w-strats"></div>
       <div id="w-siglist" hidden>
         <p class="meta" id="w-sig-title" style="margin:14px 0 4px"></p>
@@ -276,61 +112,43 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
       <p class="disclaimer" id="w-note"></p>
     </section>
 
-    <!-- ============ backtest view ============ -->
     <section id="view-backtest" hidden>
       <p class="meta" id="bt-meta"></p>
       <div class="exitbar" id="bt-exits"></div>
       <p class="exitrule" id="bt-exitrule"></p>
       <div id="bt-verdict"></div>
-      <p class="meta" id="bt-hint" style="margin:0 0 5px">Tap a test figure to see the trades behind it</p>
-      <div class="bt-tbl" id="bt-tbl">
+      <p class="meta" style="margin:0 0 5px">Tap a test figure to see the trades behind it</p>
+      <div class="bt-tbl">
         <div class="bt-hd"><span>Metric</span><span style="text-align:right">Train</span><span class="te" style="text-align:right">Test</span></div>
         <div id="bt-rows"></div>
       </div>
-      <div id="bt-panel" style="overflow:hidden;height:0">
-        <div id="bt-panel-in">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <p id="tl-title" style="margin:0;font-size:13px;font-weight:600"></p>
-            <button class="icon-btn" id="tl-close" aria-label="Close trade list">✕</button>
-          </div>
-          <div class="sortbar" id="tl-sort"></div>
-          <p class="meta" id="tl-cap" style="margin:0 0 6px;font-size:10.5px;line-height:1.45"></p>
-          <div class="scroller" style="max-height:300px"><div id="tl-rows"></div></div>
-          <p id="tl-note" class="meta" style="text-align:center;margin:8px 0 14px"></p>
+      <div id="bt-panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <p id="tl-title" style="margin:0;font-size:13px;font-weight:650"></p>
+          <button class="icon-btn" id="tl-close" aria-label="Close trade list">✕</button>
         </div>
+        <div class="sortbar" id="tl-sort"></div>
+        <div class="scroller" style="max-height:300px"><div id="tl-rows"></div></div>
+        <p id="tl-note" class="meta" style="text-align:center"></p>
       </div>
-      <p class="meta" id="bt-curve-label" style="margin:0 0 5px">Equity curve</p>
-      <div id="bt-legend" style="display:flex;gap:14px;margin-bottom:5px;font-size:11px;color:var(--muted)">
-        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:2px;background:#898781;display:inline-block"></span>Train</span>
-        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:2px;background:#2a78d6;display:inline-block"></span>Test</span>
-      </div>
-      <div class="chart-wrap" id="bt-chart-wrap"><canvas id="bt-chart" style="height:150px"></canvas></div>
+      <p class="meta" style="margin:3px 0">Equity curve</p>
+      <div class="chart-wrap"><canvas id="bt-chart"></canvas></div>
       <div class="cards" id="bt-cards"></div>
-      <p class="meta" id="bt-cfg-label" style="margin:0 0 5px">Config used</p>
+      <p class="meta" style="margin:0 0 5px">Config used</p>
       <div class="cfg" id="bt-cfg"></div>
-      <p class="meta" id="bt-updated" style="text-align:center;margin:0 0 10px"></p>
+      <p class="meta" id="bt-updated" style="text-align:center"></p>
       <p class="disclaimer" id="bt-note"></p>
     </section>
   </main>
 
-  <div class="chipgrid" id="bt-chips" hidden style="padding-left:16px;padding-right:16px"></div>
+  <div class="chipgrid" id="bt-chips" hidden></div>
   <nav>
-    <button class="on" data-view="list">
-      <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-      Screener
-    </button>
-    <button data-view="weekly">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15l2.5 2.5L16 12"/></svg>
-      Weekly
-    </button>
-    <button data-view="backtest">
-      <svg viewBox="0 0 24 24"><path d="M3 21h18M6 21V10M11 21V4M16 21v-7M21 21v-4"/></svg>
-      Backtest
-    </button>
+    <button class="on" data-view="list"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Screener</button>
+    <button data-view="weekly"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15l2.5 2.5L16 12"/></svg>Weekly</button>
+    <button data-view="backtest"><svg viewBox="0 0 24 24"><path d="M3 21h18M6 21V10M11 21V4M16 21v-7M21 21v-4"/></svg>Backtest</button>
   </nav>
 </div>
 <script src="config.js"></script>
-<script src="charts.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

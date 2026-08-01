@@ -1,104 +1,109 @@
-/* BursaMusangKing — PWA front end */
+/* BursaMusangKing — six-screener browser app */
 (() => {
+  "use strict";
+
   const CFG = window.BMK_CONFIG || {};
   const API = (CFG.WORKER_URL || "").replace(/\/+$/, "");
+  const DEMO = !API;
   const $ = (id) => document.getElementById(id);
-  const C = window.BMKChart;
 
   const SHORT = {
-    trending: "Trend",
+    trending: "Trending",
     early_uptrend: "Early",
     reversal: "Reversal",
     gaining_momentum: "Momentum",
     base_breakout: "Breakout",
+    meta_leader: "M.E.T.A.",
   };
-
   const LABELS = {
     trending: "Trending",
     early_uptrend: "Early uptrend",
     reversal: "Reversal",
-    gaining_momentum: "Momentum",
+    gaining_momentum: "Gaining momentum",
     base_breakout: "Base breakout",
+    meta_leader: "M.E.T.A. leader",
   };
+  const META_DESC = "Leadership pullback or tight leadership breakout";
 
-  let latest = null, weekly = null, backtest = null;
-  let btStrat = null, btOpen = null, btKind = null, btSort = "best";
+  let latest = null;
+  let weekly = null;
+  let backtest = null;
+  let filter = null;
+  let current = null;
+  let view = "list";
+  let btStrat = null;
   let btExit = "fixed";
+  let btKind = null;
+  let btSort = "best";
   let wSort = "recent";
+  let pollTimer = null;
+  let resizeTimer = null;
   const historyCache = {};
-  let filter = null, current = null, view = "list";
-  let pollTimer = null, resizeTimer = null;
 
-  // ------------------------------------------------------------------ theme
+  const esc = (value) => String(value ?? "").replace(/[&<>\"]/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
+  })[ch]);
+  const fmtTime = (iso) => iso ? new Date(iso).toLocaleString(undefined, {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+  }) : "–";
+  const fmtDay = (iso) => iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(
+    undefined, { day: "2-digit", month: "short", year: "2-digit" }
+  ) : "–";
+
+  function banner(text, kind = "") {
+    const el = $("banner");
+    el.textContent = text || "";
+    el.className = `banner${text ? " show" : ""}${kind ? ` ${kind}` : ""}`;
+  }
+
+  // --------------------------------------------------------------- theme
   const media = window.matchMedia("(prefers-color-scheme: dark)");
+  let theme = localStorage.getItem("bmk-theme") || (media.matches ? "dark" : "light");
   function applyTheme(mode) {
     document.documentElement.setAttribute("data-theme", mode);
     $("theme").textContent = mode === "dark" ? "☀" : "◐";
-    document.querySelector('meta[name="theme-color"]')
-      .setAttribute("content", mode === "dark" ? "#1c1c1a" : "#ffffff");
-    redraw();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", mode === "dark" ? "#1c1c1a" : "#ffffff");
+    requestAnimationFrame(redraw);
   }
-  let theme = localStorage.getItem("bmk-theme") || (media.matches ? "dark" : "light");
   applyTheme(theme);
   $("theme").onclick = () => {
     theme = theme === "dark" ? "light" : "dark";
     localStorage.setItem("bmk-theme", theme);
     applyTheme(theme);
   };
-  media.addEventListener("change", (e) => {
+  media.addEventListener("change", (event) => {
     if (localStorage.getItem("bmk-theme")) return;
-    theme = e.matches ? "dark" : "light";
+    theme = event.matches ? "dark" : "light";
     applyTheme(theme);
   });
-
-  // Canvas has no CSS reflow, so anything that changes size or colour needs an
-  // explicit repaint: theme flips, rotation, window resize.
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(redraw, 150);
+    resizeTimer = setTimeout(redraw, 120);
   });
 
-  function redraw() {
-    if (view === "list" && latest) drawSparks();
-    if (view === "detail" && current) drawDetail();
-    if (view === "weekly" && weekly && (weekly.equity_curve || []).length > 1) {
-      C.line($("w-chart"), weekly.equity_curve);
-    }
-    if (view === "backtest" && backtest) drawBtChart();
-  }
-
-  // ----------------------------------------------------------------- banner
-  function banner(msg, kind) {
-    const el = $("banner");
-    if (!msg) { el.className = "banner"; el.textContent = ""; return; }
-    el.className = "banner show" + (kind === "err" ? " err" : "");
-    el.textContent = msg;
-  }
-
-  // ------------------------------------------------------------------ fetch
-  const DEMO = !API || API.includes("example.workers.dev");
-
+  // --------------------------------------------------------------- fetch
   async function get(path) {
     if (DEMO) {
-      const key = path.startsWith("/history") ? "history" : path.slice(1).split("?")[0];
-      if (key === "status") {
-        const l = await (await fetch("demo/latest.json")).json();
-        return { latest: l.generated_at, weekly: null };
+      if (path.startsWith("/history")) {
+        const data = await fetch("demo/history.json", { cache: "no-store" }).then((r) => {
+          if (!r.ok) throw new Error(`demo/history.json → ${r.status}`);
+          return r.json();
+        });
+        const symbol = new URLSearchParams(path.split("?")[1] || "").get("symbol");
+        return { symbol, bars: data.bars, series: (data.series || {})[symbol] };
       }
-      const r = await fetch(`demo/${key}.json`, { cache: "no-store" });
-      if (!r.ok) throw new Error(`demo/${key}.json → ${r.status}`);
-      const data = await r.json();
-      const sym = new URLSearchParams(path.split("?")[1] || "").get("symbol");
-      if (sym) {
-        const series = (data.series || {})[sym];
-        if (!series) throw new Error("unknown symbol");
-        return { symbol: sym, bars: data.bars, series };
-      }
-      return data;
+      const file = path === "/latest" ? "latest.json"
+        : path === "/weekly" ? "weekly.json"
+        : path === "/backtest" ? "backtest.json" : null;
+      if (!file) throw new Error(`unknown demo path ${path}`);
+      const response = await fetch(`demo/${file}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`demo/${file} → ${response.status}`);
+      return response.json();
     }
-    const r = await fetch(API + path, { cache: "no-store" });
-    if (!r.ok) throw new Error(`${path} → ${r.status}`);
-    return r.json();
+    const response = await fetch(API + path, { cache: "no-store" });
+    if (!response.ok) throw new Error(`${path} → ${response.status}`);
+    return response.json();
   }
 
   async function loadAll() {
@@ -106,633 +111,467 @@
       latest = await get("/latest");
       renderChips();
       renderList();
-      $("updated").textContent = "Updated " + fmtTime(latest.generated_at);
-    } catch (e) {
-      banner("Couldn't load scan results. " + e.message, "err");
+      $("updated").textContent = `Updated ${fmtTime(latest.generated_at)}`;
+    } catch (error) {
+      banner(`Couldn't load scan results. ${error.message}`, "err");
       $("count").textContent = "";
     }
     try {
       weekly = await get("/weekly");
       renderWeekly();
-    } catch { /* weekly stays empty until the first review runs */ }
+    } catch (_) { /* first weekly report may not exist */ }
     try {
       backtest = await get("/backtest");
-      btEmpty(false);
       renderBacktest();
-    } catch {
-      btEmpty(true);
+    } catch (_) {
+      $("bt-meta").textContent = "No backtest report yet. Run App Backtest in GitHub Actions.";
     }
   }
 
-  function fmtTime(iso) {
-    if (!iso) return "–";
-    return new Date(iso).toLocaleString(undefined, {
-      day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-    });
+  // --------------------------------------------------------------- canvas
+  function canvasCtx(canvas, fallbackHeight) {
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(40, rect.width || canvas.parentElement?.clientWidth || 300);
+    const height = Math.max(30, rect.height || fallbackHeight);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    return { ctx, width, height };
+  }
+  function css(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  function finite(values) {
+    return values.filter((v) => Number.isFinite(Number(v))).map(Number);
+  }
+  function drawSpark(canvas, series) {
+    if (!canvas || !series) return;
+    const { ctx, width, height } = canvasCtx(canvas, 42);
+    const o = series.o || [], h = series.h || [], l = series.l || [], c = series.c || [];
+    const vals = finite([...h, ...l, ...c]);
+    if (!vals.length) return;
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const span = max - min || 1;
+    const n = c.length;
+    const step = width / Math.max(n, 1);
+    const y = (v) => 3 + (max - Number(v)) / span * (height - 6);
+    const up = css("--up"), down = css("--down"), line = css("--line");
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(0, height - 1); ctx.lineTo(width, height - 1); ctx.stroke();
+    for (let i = 0; i < n; i += 1) {
+      if (![o[i], h[i], l[i], c[i]].every((v) => Number.isFinite(Number(v)))) continue;
+      const x = i * step + step / 2;
+      ctx.strokeStyle = Number(c[i]) >= Number(o[i]) ? up : down;
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, y(h[i])); ctx.lineTo(x, y(l[i])); ctx.stroke();
+      const top = Math.min(y(o[i]), y(c[i]));
+      const bh = Math.max(1, Math.abs(y(o[i]) - y(c[i])));
+      ctx.fillRect(x - Math.max(1, step * 0.22), top, Math.max(2, step * 0.44), bh);
+    }
+  }
+  function drawDetail(canvas, series) {
+    if (!canvas || !series) return;
+    const { ctx, width, height } = canvasCtx(canvas, 260);
+    const o = series.o || [], h = series.h || [], l = series.l || [], c = series.c || [];
+    const vals = finite([...h, ...l, ...(series.e20 || []), ...(series.e50 || []), ...(series.e200 || [])]);
+    if (!vals.length) return;
+    const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+    const pad = { l: 6, r: 6, t: 8, b: 20 };
+    const plotW = width - pad.l - pad.r, plotH = height - pad.t - pad.b;
+    const n = c.length, step = plotW / Math.max(n, 1);
+    const y = (v) => pad.t + (max - Number(v)) / span * plotH;
+    const x = (i) => pad.l + i * step + step / 2;
+    ctx.strokeStyle = css("--line"); ctx.lineWidth = 0.5;
+    for (let g = 1; g < 4; g += 1) {
+      const gy = pad.t + plotH * g / 4;
+      ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(width - pad.r, gy); ctx.stroke();
+    }
+    const up = css("--up"), down = css("--down");
+    for (let i = 0; i < n; i += 1) {
+      if (![o[i], h[i], l[i], c[i]].every((v) => Number.isFinite(Number(v)))) continue;
+      ctx.strokeStyle = Number(c[i]) >= Number(o[i]) ? up : down;
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x(i), y(h[i])); ctx.lineTo(x(i), y(l[i])); ctx.stroke();
+      const top = Math.min(y(o[i]), y(c[i]));
+      const bh = Math.max(1, Math.abs(y(o[i]) - y(c[i])));
+      ctx.fillRect(x(i) - Math.max(1, step * 0.25), top, Math.max(2, step * 0.50), bh);
+    }
+    const drawMA = (arr, colour, dash = []) => {
+      if (!arr || !arr.length) return;
+      ctx.strokeStyle = colour; ctx.lineWidth = 1.2; ctx.setLineDash(dash);
+      ctx.beginPath(); let started = false;
+      arr.forEach((v, i) => {
+        if (!Number.isFinite(Number(v))) { started = false; return; }
+        if (!started) { ctx.moveTo(x(i), y(v)); started = true; } else ctx.lineTo(x(i), y(v));
+      });
+      ctx.stroke(); ctx.setLineDash([]);
+    };
+    drawMA(series.e20, css("--accent"));
+    drawMA(series.e50, "#c58a22");
+    drawMA(series.e200, css("--muted"), [4, 3]);
+  }
+  function drawLine(canvas, points, second = null) {
+    if (!canvas) return;
+    const { ctx, width, height } = canvasCtx(canvas, 150);
+    const a = points || [], b = second || [];
+    const vals = finite([...a.map((p) => p.v), ...b.map((p) => p.v)]);
+    if (vals.length < 2) return;
+    const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+    const pad = 8, all = [...a, ...b], n = Math.max(all.length, 2);
+    const y = (v) => pad + (max - Number(v)) / span * (height - pad * 2);
+    const draw = (arr, colour, xOffset, denominator) => {
+      if (!arr.length) return;
+      ctx.strokeStyle = colour; ctx.lineWidth = 1.8; ctx.beginPath();
+      arr.forEach((p, i) => {
+        const x = pad + (xOffset + i) / Math.max(denominator - 1, 1) * (width - pad * 2);
+        if (i === 0) ctx.moveTo(x, y(p.v)); else ctx.lineTo(x, y(p.v));
+      });
+      ctx.stroke();
+    };
+    ctx.strokeStyle = css("--line"); ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(pad, height / 2); ctx.lineTo(width - pad, height / 2); ctx.stroke();
+    if (b.length) {
+      draw(a, css("--muted"), 0, a.length + b.length);
+      draw(b, css("--accent"), Math.max(a.length - 1, 0), a.length + b.length);
+    } else {
+      draw(a, css("--accent"), 0, a.length);
+    }
   }
 
-  // ------------------------------------------------------------------- list
+  // --------------------------------------------------------------- list
   function visible() {
     if (!latest) return [];
     const all = latest.stocks || [];
     return filter ? all.filter((s) => s.strategy === filter) : all;
   }
-
   function renderChips() {
+    if (!latest) return;
     const counts = {};
-    (latest.stocks || []).forEach((s) => {
-      counts[s.strategy] = (counts[s.strategy] || 0) + 1;
-    });
+    (latest.stocks || []).forEach((s) => { counts[s.strategy] = (counts[s.strategy] || 0) + 1; });
     const strats = latest.strategies || Object.keys(counts);
-    if (filter === null) filter = strats.find((s) => counts[s]) || strats[0];
-
+    if (filter === null || !strats.includes(filter)) filter = strats.find((s) => counts[s]) || strats[0];
     $("chips").innerHTML = strats.map((s) => `
-      <button class="chip${s === filter ? " on" : ""}" data-s="${s}">
-        ${SHORT[s] || LABELS[s] || s}<span class="n">${counts[s] || 0}</span>
+      <button class="chip${s === filter ? " on" : ""}" data-s="${esc(s)}">
+        <span>${esc(SHORT[s] || LABELS[s] || s)}</span><span class="n">${counts[s] || 0}</span>
       </button>`).join("");
-
-    $("chips").querySelectorAll(".chip").forEach((c) => {
-      c.onclick = () => { filter = c.dataset.s; renderChips(); renderList(); };
+    $("chips").querySelectorAll(".chip").forEach((button) => {
+      button.onclick = () => { filter = button.dataset.s; renderChips(); renderList(); };
     });
   }
-
-  function esc(s) {
-    return String(s || "").replace(/[&<>"]/g, (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  }
-
   function renderList() {
+    if (!latest) return;
     const rows = visible();
-    const cur = latest.currency || "";
-    $("count").textContent =
-      `${rows.length} match${rows.length === 1 ? "" : "es"} · ` +
-      `${latest.stocks_screened} screened`;
-
+    const currency = latest.currency || "";
+    $("count").textContent = `${rows.length} match${rows.length === 1 ? "" : "es"} · ${latest.stocks_screened || 0} screened`;
     if (!rows.length) {
-      $("list").innerHTML =
-        `<p class="empty">No ${LABELS[filter] || filter} matches in this scan.</p>`;
+      $("list").innerHTML = `<p class="empty">No ${esc(LABELS[filter] || filter)} matches in this scan.</p>`;
       return;
     }
-
     $("list").innerHTML = rows.map((s, i) => {
-      const dir = s.change_pct >= 0 ? "up" : "down";
-      const sign = s.change_pct > 0 ? "+" : "";
-      return `
-      <div class="row" data-i="${i}">
-        <div class="spark"><canvas id="sp${i}"></canvas></div>
-        <div class="row-mid">
-          <p class="name">${esc(s.symbol)}${s.is_new ? '<span class="badge">NEW</span>' : ""}</p>
-          ${s.name ? `<p class="co">${esc(s.name)}</p>` : ""}
-          <p class="sub">RSI ${s.rsi} · ADX ${s.adx} · Vol ${s.vol_ratio}x</p>
-        </div>
-        <div class="row-end">
-          <p class="chg ${dir}">${sign}${s.change_pct}%</p>
-          <p class="px">${cur} ${s.close}</p>
-        </div>
-      </div>`;
+      const dir = Number(s.change_pct) >= 0 ? "up" : "down";
+      const sign = Number(s.change_pct) > 0 ? "+" : "";
+      const sub = s.strategy === "meta_leader"
+        ? `${META_DESC} · Vol ${s.vol_ratio}x`
+        : `RSI ${s.rsi} · ADX ${s.adx} · Vol ${s.vol_ratio}x`;
+      return `<button class="row" data-i="${i}">
+        <span class="spark"><canvas id="sp${i}"></canvas></span>
+        <span class="row-mid">
+          <span class="name">${esc(s.symbol)}${s.is_new ? '<span class="badge">NEW</span>' : ""}</span>
+          ${s.name ? `<span class="co">${esc(s.name)}</span>` : ""}
+          <span class="sub">${esc(sub)}</span>
+        </span>
+        <span class="row-end">
+          <span class="chg ${dir}">${sign}${s.change_pct ?? 0}%</span>
+          <span class="px">${esc(currency)}${s.close}</span>
+        </span>
+      </button>`;
     }).join("");
-
-    drawSparks();
-    $("list").querySelectorAll(".row").forEach((r) => {
-      r.onclick = () => openDetail(rows[+r.dataset.i]);
+    $("list").querySelectorAll(".row").forEach((row) => {
+      row.onclick = () => openDetail(rows[Number(row.dataset.i)]);
     });
+    requestAnimationFrame(() => rows.forEach((s, i) => drawSpark($(`sp${i}`), s.spark)));
   }
 
-  function drawSparks() {
-    visible().forEach((s, i) => {
-      const el = $("sp" + i);
-      if (el) C.sparkline(el, s.spark);
-    });
-  }
-
-  // ----------------------------------------------------------------- detail
-  async function openDetail(s) {
-    current = s;
+  // --------------------------------------------------------------- detail
+  async function openDetail(stock) {
+    current = stock;
     show("detail");
-    const cur = latest.currency || "";
-    const cat = (LABELS[s.strategy] || s.strategy).toUpperCase();
-
-    $("d-title").innerHTML =
-      `${esc(s.symbol)}<span class="sep">|</span>` +
-      `<span class="cat">${esc(cat)}</span><span class="sep">|</span>` +
-      `<span class="stat">${cur}${s.close}</span>` +
-      `<span class="stat">RSI ${s.rsi}</span>` +
-      `<span class="stat">ADX ${s.adx}</span>` +
-      `<span class="stat">Vol ${s.vol_ratio}x</span>` +
-      `<span class="stat">ROC10 ${s.roc10}%</span>`;
-    $("d-co").textContent = s.name || "";
-    $("title").textContent = s.symbol;
-    const ex = (latest && latest.exit_rule) || {};
-    $("d-lvl-head").textContent = "Levels" + (ex.label ? ` · ${ex.label}` : "");
-    $("d-entry").textContent = s.entry != null
-      ? `${cur} ${s.entry}` : "–";
-    $("d-stop").textContent = s.stop != null
-      ? `${cur} ${s.stop}` + (s.stop_pct_now != null ? `  ${s.stop_pct_now}%` : "")
-      : "–";
-    $("d-trail").textContent = s.trail_dist != null
-      ? `${cur} ${s.trail_dist}` + (ex.mult ? `  (${ex.mult}× ATR14)` : "")
-      : "–";
-    // Say which stop is governing today. On a volatile counter the ATR trail
-    // starts wider than the fixed floor, so the floor holds until the trail
-    // ratchets above it — showing only one number would hide that.
-    $("d-lvl-note").textContent = s.stop == null ? "" : (
-      (s.stop_from === "trail"
-        ? `Trailing stop is governing. It rises as the highest close rises and never falls back. `
-        : `The ${ex.stop_pct || 7}% initial stop is governing — the ATR trail is currently wider than it. `)
-      + `Entry is the next bar's open; ${cur} ${s.entry} is the last close, shown for reference.`);
-
-    if (!historyCache[s.symbol]) {
+    const currency = latest.currency || "";
+    const category = (LABELS[stock.strategy] || stock.strategy).toUpperCase();
+    $("d-title").innerHTML = `${esc(stock.symbol)}<span class="sep">|</span>`
+      + `<span class="cat">${esc(category)}</span><span class="sep">|</span>`
+      + `<span class="stat">${esc(currency)}${stock.close}</span>`
+      + `<span class="stat">RSI ${stock.rsi}</span>`
+      + `<span class="stat">ADX ${stock.adx}</span>`
+      + `<span class="stat">Vol ${stock.vol_ratio}x</span>`;
+    $("d-co").textContent = stock.name || "";
+    $("title").textContent = stock.symbol;
+    const exit = latest.exit_rule || {};
+    $("d-lvl-head").textContent = `Levels${exit.label ? ` · ${exit.label}` : ""}`;
+    $("d-entry").textContent = stock.entry != null ? `${currency} ${stock.entry}` : "–";
+    $("d-stop").textContent = stock.stop != null
+      ? `${currency} ${stock.stop}${stock.stop_pct_now != null ? `  ${stock.stop_pct_now}%` : ""}` : "–";
+    $("d-trail").textContent = stock.trail_dist != null
+      ? `${currency} ${stock.trail_dist}${exit.mult ? `  (${exit.mult}× ATR14)` : ""}` : "–";
+    $("d-lvl-note").textContent = stock.strategy === "meta_leader"
+      ? `${META_DESC}. Entry is the next bar's open; the displayed price is the latest close.`
+      : (stock.stop == null ? "" : `Entry is the next bar's open; ${currency} ${stock.entry} is the latest close shown for reference.`);
+    if (!(stock.symbol in historyCache)) {
       try {
-        const r = await get("/history?symbol=" + encodeURIComponent(s.symbol));
-        historyCache[s.symbol] = r.series;
-      } catch {
-        historyCache[s.symbol] = null;
+        const result = await get(`/history?symbol=${encodeURIComponent(stock.symbol)}`);
+        historyCache[stock.symbol] = result.series || null;
+      } catch (_) {
+        historyCache[stock.symbol] = null;
       }
     }
-    if (current === s) drawDetail();
+    if (current === stock) drawDetail($("d-chart"), historyCache[stock.symbol] || stock.spark);
   }
-
-  function drawDetail() {
-    const s = historyCache[current.symbol];
-    if (s) {
-      C.detail($("d-chart"), s);
-    } else {
-      // No 3-month history for this symbol — fall back to the 20-bar thumbnail
-      // data so the screen still shows something rather than an empty box.
-      C.detail($("d-chart"), Object.assign({ t: [], v: [] }, current.spark));
-    }
-  }
-
   $("back").onclick = () => { current = null; show("list"); };
 
-  // ----------------------------------------------------------------- weekly
+  // --------------------------------------------------------------- weekly
   function renderWeekly() {
     if (!weekly) return;
-    const o = weekly.overall || {};
-    const card = (l, v, cls) =>
-      `<div class="c"><p>${l}</p><p class="${cls || ""}">${v}</p></div>`;
-
-    $("w-cards").innerHTML = o.trades
-      ? card("Win rate", o.win_rate + "%") +
-        card("Profit factor", o.profit_factor ?? "–") +
-        card("Signals", o.trades) +
-        card("Worst", o.worst + "%", "down")
-      : card("Win rate", "–") + card("Profit factor", "–") +
-        card("Signals", "0") + card("Worst", "–");
-
-    $("w-curve-label").textContent =
-      `Cumulative signal performance · last ${weekly.lookback_weeks} weeks`;
-
+    const overall = weekly.overall || {};
+    const card = (label, value, cls = "") => `<div class="c"><p>${label}</p><p class="${cls}">${value}</p></div>`;
+    $("w-cards").innerHTML = overall.trades
+      ? card("Win rate", `${overall.win_rate}%`) + card("Profit factor", overall.profit_factor ?? "–")
+        + card("Signals", overall.trades) + card("Worst", `${overall.worst}%`, "down")
+      : card("Win rate", "–") + card("Profit factor", "–") + card("Signals", 0) + card("Worst", "–");
+    $("w-curve-label").textContent = `Cumulative signal performance · last ${weekly.lookback_weeks || "?"} weeks`;
     $("w-strats").innerHTML = (weekly.strategies || []).map((s) => {
       const h = s.horizons || {};
-      const line = (n) => h[n]
-        ? `+${n}d: ${h[n].win_rate}% win · avg ${h[n].avg > 0 ? "+" : ""}${h[n].avg}% (n=${h[n].n})`
-        : null;
-      const parts = [5, 10, 20].map(line).filter(Boolean);
-      return `<div class="strat-block">
-        <h3>${LABELS[s.strategy] || s.strategy} — ${s.signals} new signals</h3>
-        ${parts.map((p) => `<p class="l">${p}</p>`).join("")}
-        <p class="l">best ${esc(s.best.symbol)} ${s.best.ret > 0 ? "+" : ""}${s.best.ret}% ·
-           worst ${esc(s.worst.symbol)} ${s.worst.ret > 0 ? "+" : ""}${s.worst.ret}%</p>
+      const parts = [5, 10, 20].filter((n) => h[n]).map((n) =>
+        `+${n}d: ${h[n].win_rate}% win · avg ${h[n].avg > 0 ? "+" : ""}${h[n].avg}% (n=${h[n].n})`
+      );
+      const best = s.best || {}, worst = s.worst || {};
+      return `<div class="strat-block"><h3>${esc(LABELS[s.strategy] || s.strategy)} — ${s.signals || 0} new signals</h3>
+        ${parts.map((p) => `<p class="l">${esc(p)}</p>`).join("")}
+        ${best.symbol ? `<p class="l">best ${esc(best.symbol)} ${best.ret > 0 ? "+" : ""}${best.ret}% · worst ${esc(worst.symbol || "–")} ${worst.ret > 0 ? "+" : ""}${worst.ret ?? "–"}%</p>` : ""}
       </div>`;
-    }).join("") || `<p class="empty">${esc(weekly.note
-        || "No completed signals yet. Results appear about 5 trading days "
-         + "after a signal fires.")}</p>`;
-
-    // The note used to render twice — once as the empty-state text inside
-    // #w-strats and again in #w-note. Show it in exactly one place.
-    const hasStrats = (weekly.strategies || []).length > 0;
-    $("w-note").textContent = hasStrats ? (weekly.note || "") : "";
+    }).join("") || `<p class="empty">${esc(weekly.note || "No completed signals yet.")}</p>`;
+    $("w-note").textContent = (weekly.strategies || []).length ? (weekly.note || "") : "";
     renderSignals();
-
-    // An empty canvas still occupies its CSS height, which left a large blank
-    // gap on a screen that has nothing to plot. Collapse it instead.
-    const pts = (weekly.equity_curve || []).length;
-    $("w-chart").parentElement.style.display = pts > 1 ? "" : "none";
-    $("w-curve-label").style.display = pts > 1 ? "" : "none";
-    if (view === "weekly" && pts > 1) C.line($("w-chart"), weekly.equity_curve);
+    const curve = weekly.equity_curve || [];
+    $("w-chart").parentElement.hidden = curve.length < 2;
+    $("w-curve-label").hidden = curve.length < 2;
+    if (view === "weekly" && curve.length > 1) requestAnimationFrame(() => drawLine($("w-chart"), curve));
+  }
+  const W_SORTS = [["recent", "Newest"], ["best10", "Best +10d"], ["worst10", "Worst +10d"], ["pending", "Pending first"]];
+  function renderSignals() {
+    const all = weekly?.signals || [];
+    $("w-siglist").hidden = !all.length;
+    if (!all.length) return;
+    const pending = all.filter((x) => x.p).length;
+    $("w-sig-title").textContent = `Signals · ${all.length}${pending ? ` · ${pending} still pending` : ""}`;
+    $("w-sort").innerHTML = W_SORTS.map(([key, label]) => `<button class="sort${key === wSort ? " on" : ""}" data-s="${key}">${label}</button>`).join("");
+    $("w-sort").querySelectorAll(".sort").forEach((button) => {
+      button.onclick = () => { wSort = button.dataset.s; renderSignals(); };
+    });
+    const byReturn = (direction) => (a, b) => {
+      if (a.r10 == null && b.r10 == null) return a.d < b.d ? 1 : -1;
+      if (a.r10 == null) return 1;
+      if (b.r10 == null) return -1;
+      return direction * (b.r10 - a.r10);
+    };
+    const rows = all.slice().sort(
+      wSort === "best10" ? byReturn(1)
+        : wSort === "worst10" ? byReturn(-1)
+          : wSort === "pending" ? ((a, b) => Number(Boolean(b.p)) - Number(Boolean(a.p)) || (a.d < b.d ? 1 : -1))
+            : ((a, b) => a.d < b.d ? 1 : a.d > b.d ? -1 : 0)
+    );
+    const cell = (label, value) => value == null
+      ? `<span>${label} <b class="faint">–</b></span>`
+      : `<span>${label} <b class="${value > 0 ? "up" : "down"}">${value > 0 ? "+" : ""}${value}%</b></span>`;
+    $("w-sigs").innerHTML = rows.map((x) => `<div class="sg-row">
+      <div class="sg-top"><span class="sym">${esc(x.s)}${x.p ? ' <span class="pend">PENDING</span>' : ""}</span><span class="d">${fmtDay(x.d)}</span></div>
+      ${x.n ? `<p class="sg-co">${esc(x.n)}</p>` : ""}
+      <div class="sg-h">${cell("5d", x.r5)}${cell("10d", x.r10)}${cell("20d", x.r20)}</div>
+    </div>`).join("");
   }
 
   // --------------------------------------------------------------- backtest
   const LEVEL_ICON = { good: "✓", warn: "!", bad: "✕", thin: "·" };
-
-  const nTest = (s, exit) =>
-    (((s.exits || {})[exit] || {}).test || {}).trades || 0;
-
+  const nTest = (strategy, exit) => (((strategy.exits || {})[exit] || {}).test || {}).trades || 0;
   function btStrategy() {
-    if (!backtest) return null;
-    const list = backtest.strategies || [];
+    const list = backtest?.strategies || [];
     if (!list.length) return null;
-    if (!btStrat) {
-      // Default to the strategy with the most test trades, not just the first —
-      // a strategy with 3 trades tells you nothing and shouldn't open by default.
-      const best = list.reduce((a, b) =>
-        nTest(b, "fixed") > nTest(a, "fixed") ? b : a, list[0]);
-      btStrat = best && best.strategy;
+    if (!btStrat || !list.some((s) => s.strategy === btStrat)) {
+      btStrat = list.reduce((best, item) => nTest(item, "fixed") > nTest(best, "fixed") ? item : best, list[0]).strategy;
     }
-    return list.find((x) => x.strategy === btStrat) || list[0];
+    return list.find((s) => s.strategy === btStrat) || list[0];
   }
-
-  /** The selected strategy under the selected exit rule. */
   function btCurrent() {
-    const s = btStrategy();
-    if (!s) return null;
-    const ex = s.exits || {};
-    return ex[btExit] || ex.fixed || null;
+    const strategy = btStrategy();
+    if (!strategy) return null;
+    return (strategy.exits || {})[btExit] || (strategy.exits || {}).fixed || null;
   }
-
-  function btEmpty(on) {
-    // With no report, the table header, equity legend and config box render as
-    // hollow scaffolding around a blank gap, which reads as broken rather than
-    // as "nothing here yet". Hide the lot and show one line.
-    ["bt-exits", "bt-exitrule", "bt-verdict", "bt-hint", "bt-tbl", "bt-curve-label",
-     "bt-legend", "bt-chart-wrap", "bt-cards", "bt-cfg-label", "bt-cfg",
-     "bt-updated", "bt-note"].forEach((id) => {
-      const el = $(id);
-      if (el) el.style.display = on ? "none" : "";
-    });
-    // The chip grid lives outside <main> and is driven by the hidden attribute,
-    // so leave style.display alone here or it would win over the attribute.
-    $("bt-chips").hidden = on || view !== "backtest";
-    $("bt-meta").textContent = on
-      ? "No backtest yet. Run the App Backtest workflow from the Actions tab — "
-        + "it takes 20–40 minutes."
-      : "";
-  }
-
   function renderBacktest() {
     if (!backtest) return;
-    const strat = btStrategy();
-    const cur = btCurrent();
-    const rules = backtest.exit_rules
-      || [{ key: "fixed", label: "Fixed", detail: "" }];
-
-    $("bt-meta").textContent =
-      `${backtest.universe_size} stocks · ${backtest.date_from || "?"} – ${backtest.date_to || "?"}` +
-      (cur ? ` · ${cur.trades_total || 0} trades` : "");
-
-    // Exit rule sits directly above the verdict it changes, so switching it
-    // and watching the banner flip is one glance rather than two screens.
-    $("bt-exits").innerHTML = rules.map((r) =>
-      `<button class="${r.key === btExit ? "on" : ""}" data-e="${r.key}">${esc(r.label)}</button>`
-    ).join("");
-    $("bt-exits").querySelectorAll("button").forEach((b) => {
-      b.onclick = () => {
-        btExit = b.dataset.e; btOpen = null;
-        closeTrades(); renderBacktest();
-      };
+    const strategy = btStrategy();
+    const currentExit = btCurrent();
+    const rules = backtest.exit_rules || [{ key: "fixed", label: "Fixed", detail: "" }];
+    $("bt-meta").textContent = `${backtest.universe_size || 0} stocks · ${backtest.date_from || "?"} – ${backtest.date_to || "?"}${currentExit ? ` · ${currentExit.trades_total || 0} trades` : ""}`;
+    $("bt-exits").innerHTML = rules.map((rule) => `<button class="${rule.key === btExit ? "on" : ""}" data-e="${esc(rule.key)}">${esc(rule.label)}</button>`).join("");
+    $("bt-exits").querySelectorAll("button").forEach((button) => {
+      button.onclick = () => { btExit = button.dataset.e; btKind = null; renderBacktest(); };
     });
-    const rule = rules.find((r) => r.key === btExit);
-    $("bt-exitrule").textContent = rule ? rule.detail || "" : "";
-
-    // Strategy chips live at the bottom beside the nav, matching Screener.
-    // They sit outside <main>, so nothing hides them when another tab is
-    // showing — and renderBacktest() runs at startup while Screener is still
-    // on screen. Gate on the current view, or they leak onto every tab.
+    const rule = rules.find((item) => item.key === btExit);
+    $("bt-exitrule").textContent = rule?.detail || "";
     $("bt-chips").hidden = view !== "backtest";
-    $("bt-chips").innerHTML = (backtest.strategies || []).map((s) => `
-      <button class="chip${s.strategy === btStrat ? " on" : ""}" data-s="${s.strategy}">
-        ${SHORT[s.strategy] || s.strategy}<span class="n">${nTest(s, btExit)}</span>
-      </button>`).join("");
-    $("bt-chips").querySelectorAll(".chip").forEach((c) => {
-      c.onclick = () => {
-        btStrat = c.dataset.s; btOpen = null;
-        closeTrades(); renderBacktest();
-      };
+    $("bt-chips").innerHTML = (backtest.strategies || []).map((s) => `<button class="chip${s.strategy === btStrat ? " on" : ""}" data-s="${esc(s.strategy)}"><span>${esc(SHORT[s.strategy] || s.strategy)}</span><span class="n">${nTest(s, btExit)}</span></button>`).join("");
+    $("bt-chips").querySelectorAll(".chip").forEach((button) => {
+      button.onclick = () => { btStrat = button.dataset.s; btKind = null; renderBacktest(); };
     });
-
-    if (!cur) return;
-    const v = cur.verdict || {};
-    const vs = v.vs ? ` ${v.vs}` : "";
-    $("bt-verdict").innerHTML = v.text
-      ? `<div class="verdict v-${v.level || "thin"}"><span>${LEVEL_ICON[v.level] || "·"}</span><span>${esc(v.text + vs)}</span></div>`
-      : "";
-
-    const tr = cur.train || {}, te = cur.test || {};
-    const pct = (x) => (x == null ? "–" : x + "%");
-    const num = (x) => (x == null ? "–" : x);
-    const wl = (x) => (x.wins == null ? "–" : `${x.wins}/${x.losses}`);
+    if (!strategy || !currentExit) return;
+    const verdict = currentExit.verdict || {};
+    $("bt-verdict").innerHTML = verdict.text
+      ? `<div class="verdict v-${esc(verdict.level || "thin")}"><span>${LEVEL_ICON[verdict.level] || "·"}</span><span>${esc(verdict.text + (verdict.vs ? ` ${verdict.vs}` : ""))}</span></div>` : "";
+    const train = currentExit.train || {}, test = currentExit.test || {};
+    const pct = (x) => x == null ? "–" : `${x}%`;
+    const num = (x) => x == null ? "–" : x;
+    const wl = (x) => x.wins == null ? "–" : `${x.wins}/${x.losses}`;
     const rows = [
-      { k: "win", l: "Win rate", tr: pct(tr.win_rate), te: pct(te.win_rate), tap: 1 },
-      { k: "lose", l: "Loss rate", tr: pct(tr.loss_rate), te: pct(te.loss_rate), tap: 1 },
-      { k: null, l: "Won / lost", tr: wl(tr), te: wl(te) },
-      { k: null, l: "Profit factor", tr: num(tr.profit_factor), te: num(te.profit_factor) },
-      { k: "all", l: "Avg return", tr: pct(tr.avg), te: pct(te.avg), tap: 1 },
-      { k: "lose", l: "Worst trade", tr: pct(tr.worst), te: pct(te.worst), tap: 1 },
-      { k: "all", l: "Trades", tr: num(tr.trades), te: num(te.trades), tap: 1 },
+      ["Win rate", pct(train.win_rate), pct(test.win_rate), "win"],
+      ["Loss rate", pct(train.loss_rate), pct(test.loss_rate), "lose"],
+      ["Won / lost", wl(train), wl(test), null],
+      ["Profit factor", num(train.profit_factor), num(test.profit_factor), null],
+      ["Avg return", pct(train.avg), pct(test.avg), "all"],
+      ["Worst trade", pct(train.worst), pct(test.worst), "lose"],
+      ["Trades", num(train.trades), num(test.trades), "all"],
     ];
-
-    $("bt-rows").innerHTML = rows.map((r, i) => `
-      <div class="bt-row">
-        <span>${r.l}</span><span class="tr">${r.tr}</span>
-        ${r.tap
-          ? `<span class="te tap" data-k="${r.k}" data-i="${i}" role="button" tabindex="0">${r.te} ›</span>`
-          : `<span class="te">${r.te}</span>`}
-      </div>`).join("");
-
-    $("bt-rows").querySelectorAll(".tap").forEach((t) => {
-      const go = () => (btOpen === t.dataset.i ? closeTrades() : openTrades(t.dataset.k, t.dataset.i));
-      t.onclick = go;
-      t.onkeydown = (e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
-      };
+    $("bt-rows").innerHTML = rows.map(([label, tr, te, kind]) => `<div class="bt-row"><span>${label}</span><span class="tr">${tr}</span>${kind ? `<button class="te tap" data-k="${kind}">${te} ›</button>` : `<span class="te">${te}</span>`}</div>`).join("");
+    $("bt-rows").querySelectorAll(".tap").forEach((button) => {
+      button.onclick = () => { btKind = button.dataset.k; btSort = btKind === "lose" ? "worst" : "best"; drawTrades(); };
     });
-
-    const mdd = cur.max_drawdown;
-    const card = (l, val) => `<div class="c"><p>${l}</p><p>${val}</p></div>`;
-    $("bt-cards").innerHTML =
-      card("Max drawdown", mdd == null ? "–" : mdd + "%") +
-      card("Avg hold", te.avg_hold == null ? "–" : te.avg_hold + "d") +
-      card("Best trade", te.best == null ? "–" : "+" + te.best + "%") +
-      card("Median", te.median == null ? "–" : te.median + "%");
-
-    const cfg = (backtest.strategy_config || {})[strat.strategy] || {};
-    const p = backtest.params || {};
-    $("bt-cfg").textContent =
-      Object.entries(cfg).map(([k, x]) => `${k} ${x}`).join(" · ") +
-      (Object.keys(p).length
-        ? "\n" + Object.entries(p).map(([k, x]) => `${k} ${x}`).join(" · ")
-        : "");
-
-    $("bt-updated").textContent = "Last run " + fmtTime(backtest.generated_at);
+    const card = (label, value) => `<div class="c"><p>${label}</p><p>${value}</p></div>`;
+    $("bt-cards").innerHTML = card("Max drawdown", currentExit.max_drawdown == null ? "–" : `${currentExit.max_drawdown}%`)
+      + card("Avg hold", test.avg_hold == null ? "–" : `${test.avg_hold}d`)
+      + card("Best trade", test.best == null ? "–" : `+${test.best}%`)
+      + card("Median", test.median == null ? "–" : `${test.median}%`);
+    const strategyConfig = (backtest.strategy_config || {})[strategy.strategy] || {};
+    const params = backtest.params || {};
+    $("bt-cfg").textContent = Object.entries(strategyConfig).map(([k, v]) => `${k} ${v}`).join(" · ")
+      + (Object.keys(params).length ? `\n${Object.entries(params).map(([k, v]) => `${k} ${v}`).join(" · ")}` : "");
+    $("bt-updated").textContent = `Last run ${fmtTime(backtest.generated_at)}`;
     $("bt-note").textContent = backtest.note || "";
-    requestAnimationFrame(drawBtChart);
+    const equity = currentExit.equity || {};
+    requestAnimationFrame(() => drawLine($("bt-chart"), equity.train || [], equity.test || []));
+    if (!btKind) closeTrades();
   }
-
-  function drawBtChart() {
-    const cur = btCurrent();
-    if (!cur) return;
-    const eq = cur.equity || {};
-    C.split($("bt-chart"), eq.train || [], eq.test || []);
-  }
-
-  const SORTS = [
-    ["best", "Best first"], ["worst", "Worst first"], ["recent", "Most recent"],
-  ];
-
-  function openTrades(kind, idx) {
-    btKind = kind;
-    // Sensible default per bucket: winners are interesting best-first
-    // (concentration), losers worst-first (tail risk).
-    btSort = kind === "lose" ? "worst" : "best";
-    drawTrades();
-    const panel = $("bt-panel");
-    panel.style.transition = "height .2s ease";
-    panel.style.height = $("bt-panel-in").offsetHeight + "px";
-    btOpen = idx;
-    $("bt-rows").querySelectorAll(".tap").forEach((t) =>
-      t.classList.toggle("on", t.dataset.i === idx));
-  }
-
+  const SORTS = [["best", "Best first"], ["worst", "Worst first"], ["recent", "Most recent"]];
   function drawTrades() {
-    const cur = btCurrent();
-    if (!cur || !btKind) return;
-    // Only test trades are offered — train trades are the in-sample half the
-    // strategy was tuned against, so inspecting them tells you nothing useful.
-    let rows = (cur.trades || []).filter((t) => t.p === "test");
+    const currentExit = btCurrent();
+    if (!currentExit || !btKind) return;
+    let rows = (currentExit.trades || []).filter((t) => t.p === "test");
     let title = "All test trades";
     if (btKind === "win") { rows = rows.filter((t) => t.r > 0); title = "Winning trades"; }
     if (btKind === "lose") { rows = rows.filter((t) => t.r <= 0); title = "Losing trades"; }
-
-    rows = rows.slice().sort(
-      btSort === "best" ? (a, b) => b.r - a.r
-      : btSort === "worst" ? (a, b) => a.r - b.r
-      : (a, b) => (a.in < b.in ? 1 : a.in > b.in ? -1 : 0));
-
-    // Share of the period's gross profit (or gross loss for a losing trade),
-    // measured against the true period totals from the exporter rather than
-    // the visible rows — so a capped list can't inflate the percentages.
-    const te = cur.test || {};
-    const gp = te.gross_profit || 0, gl = te.gross_loss || 0;
-    const share = (r) => {
-      const base = r > 0 ? gp : gl;
-      if (!base) return null;
-      return Math.abs(r) / base * 100;
-    };
-
+    rows.sort(btSort === "best" ? (a, b) => b.r - a.r : btSort === "worst" ? (a, b) => a.r - b.r : (a, b) => a.in < b.in ? 1 : -1);
     $("tl-title").textContent = `${title} · ${rows.length}`;
-
-    const showCumHead = btKind !== "all" &&
-      ((btKind === "win" && btSort === "best") ||
-       (btKind === "lose" && btSort === "worst"));
-    $("tl-cap").textContent = showCumHead
-      ? (btKind === "win"
-          ? "Right column: this trade's share of total profit, then the running total."
-          : "Right column: this trade's share of total loss, then the running total.")
-      : "";
-    $("tl-cap").style.display = showCumHead ? "" : "none";
-
-    $("tl-sort").innerHTML = SORTS.map(([k, l]) =>
-      `<button class="sort${k === btSort ? " on" : ""}" data-s="${k}">${l}</button>`).join("");
-    $("tl-sort").querySelectorAll(".sort").forEach((b) => {
-      b.onclick = () => {
-        btSort = b.dataset.s;
-        drawTrades();
-        $("bt-panel").style.height = $("bt-panel-in").offsetHeight + "px";
-      };
+    $("tl-sort").innerHTML = SORTS.map(([key, label]) => `<button class="sort${key === btSort ? " on" : ""}" data-s="${key}">${label}</button>`).join("");
+    $("tl-sort").querySelectorAll(".sort").forEach((button) => {
+      button.onclick = () => { btSort = button.dataset.s; drawTrades(); };
     });
-
-    let cum = 0;
-    $("tl-rows").innerHTML = rows.length
-      ? rows.map((t) => {
-          const sh = share(t.r);
-          let conTxt = "";
-          if (sh != null) {
-            // Cumulative only reads meaningfully down a single-sign,
-            // magnitude-ordered list — otherwise it's an arbitrary running sum.
-            const showCum = btKind !== "all" &&
-              ((btKind === "win" && btSort === "best") ||
-               (btKind === "lose" && btSort === "worst"));
-            if (showCum) {
-              cum += sh;
-              conTxt = `${sh.toFixed(1)}% · cum ${cum.toFixed(0)}%`;
-            } else {
-              conTxt = `${sh.toFixed(1)}% of ${t.r > 0 ? "profit" : "loss"}`;
-            }
-          }
-          return `
-        <div class="tl-row">
-          <div class="tl-l1">
-            <span class="sym">${esc(t.s)} <span class="why">${esc(t.x)}</span></span>
-            <span class="ret ${t.r > 0 ? "up" : "down"}">${t.r > 0 ? "+" : ""}${t.r}%</span>
-          </div>
-          <div class="tl-l2">
-            <span class="dt">${fmtDay(t.in)} → ${fmtDay(t.out)} · ${t.h}d</span>
-            <span class="con">${conTxt}</span>
-          </div>
-        </div>`;
-        }).join("")
-      : `<p class="empty">No trades in this bucket.</p>`;
-
-    const capped = (te.trades || 0) > (cur.trades || []).filter((t) => t.p === "test").length;
-    $("tl-note").textContent = capped
-      ? `Showing the most recent ${rows.length} of ${te.trades}`
-      : `${rows.length} trade${rows.length === 1 ? "" : "s"}`;
+    $("tl-rows").innerHTML = rows.length ? rows.map((t) => `<div class="tl-row"><div class="tl-l1"><span class="sym">${esc(t.s)} <span class="why">${esc(t.x)}</span></span><span class="ret ${t.r > 0 ? "up" : "down"}">${t.r > 0 ? "+" : ""}${t.r}%</span></div><div class="tl-l2"><span class="dt">${fmtDay(t.in)} → ${fmtDay(t.out)} · ${t.h}d</span></div></div>`).join("") : '<p class="empty">No trades in this bucket.</p>';
+    $("tl-note").textContent = `${rows.length} trade${rows.length === 1 ? "" : "s"}`;
+    $("bt-panel").classList.add("open");
   }
-
   function closeTrades() {
-    const panel = $("bt-panel");
-    if (panel) panel.style.height = "0px";
-    btOpen = null; btKind = null;
-    const r = $("bt-rows");
-    if (r) r.querySelectorAll(".tap").forEach((t) => t.classList.remove("on"));
+    $("bt-panel").classList.remove("open");
+    btKind = null;
   }
   $("tl-close").onclick = closeTrades;
 
-  const W_SORTS = [
-    ["recent", "Newest"], ["best10", "Best +10d"], ["worst10", "Worst +10d"],
-    ["pending", "Pending first"],
-  ];
-
-  function renderSignals() {
-    const all = (weekly && weekly.signals) || [];
-    $("w-siglist").hidden = !all.length;
-    if (!all.length) return;
-
-    const pend = all.filter((x) => x.p).length;
-    $("w-sig-title").textContent =
-      `Signals · ${all.length}` + (pend ? ` · ${pend} still pending` : "");
-
-    $("w-sort").innerHTML = W_SORTS.map(([k, l]) =>
-      `<button class="sort${k === wSort ? " on" : ""}" data-s="${k}">${l}</button>`).join("");
-    $("w-sort").querySelectorAll(".sort").forEach((b) => {
-      b.onclick = () => { wSort = b.dataset.s; renderSignals(); };
+  // --------------------------------------------------------------- nav
+  function show(next) {
+    view = next;
+    ["list", "detail", "weekly", "backtest"].forEach((name) => {
+      $("view-" + name).hidden = name !== next;
     });
-
-    // Pending signals have no return to rank by. Rather than treating a missing
-    // value as zero — which would scatter them through the middle of a sorted
-    // list — they always sink to the bottom of a return sort.
-    const byR = (dir) => (a, b) => {
-      const x = a.r10, y = b.r10;
-      if (x == null && y == null) return a.d < b.d ? 1 : -1;
-      if (x == null) return 1;
-      if (y == null) return -1;
-      return dir * (y - x);
-    };
-    const rows = all.slice().sort(
-      wSort === "best10" ? byR(1)
-      : wSort === "worst10" ? byR(-1)
-      : wSort === "pending" ? ((a, b) => (b.p ? 1 : 0) - (a.p ? 1 : 0)
-          || (a.d < b.d ? 1 : -1))
-      : (a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
-
-    const cell = (label, v) => v == null
-      ? `<span>${label} <b style="color:var(--faint)">–</b></span>`
-      : `<span>${label} <b class="${v > 0 ? "up" : "down"}">${v > 0 ? "+" : ""}${v}%</b></span>`;
-
-    $("w-sigs").innerHTML = rows.map((x) => `
-      <div class="sg-row">
-        <div class="sg-top">
-          <span class="sym">${esc(x.s)}${x.p ? ' <span class="pend">PENDING</span>' : ""}</span>
-          <span class="d">${fmtDay(x.d)}</span>
-        </div>
-        ${x.n ? `<p class="sg-co">${esc(x.n)}</p>` : ""}
-        <div class="sg-h">
-          ${cell("5d", x.r5)}${cell("10d", x.r10)}${cell("20d", x.r20)}
-        </div>
-      </div>`).join("");
-  }
-
-  function fmtDay(iso) {
-    const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const [, m, d] = iso.split("-");
-    return `${d} ${M[+m - 1]}`;
-  }
-
-  // ------------------------------------------------------------------- nav
-  function show(v) {
-    view = v;
-    ["list", "detail", "weekly", "backtest"].forEach((x) => {
-      $("view-" + x).hidden = x !== v;
+    $("run").hidden = next !== "list";
+    $("bt-chips").hidden = next !== "backtest" || !backtest;
+    document.querySelectorAll("nav button").forEach((button) => {
+      button.classList.toggle("on", button.dataset.view === next || (next === "detail" && button.dataset.view === "list"));
     });
-    // Both of these sit outside <main>, so they need hiding explicitly.
-    $("bt-chips").hidden = v !== "backtest" || !backtest;
-    $("run").hidden = v !== "list";
-    document.querySelectorAll("nav button").forEach((b) => {
-      b.classList.toggle("on", b.dataset.view === v ||
-        (v === "detail" && b.dataset.view === "list"));
-    });
-    if (v !== "detail") {
-      $("title").textContent =
-        v === "weekly" ? "Weekly review"
-        : v === "backtest" ? "Backtest"
-        : "BursaMusangKing";
-    }
-    const m = document.querySelector("main");
-    if (m) m.scrollTop = 0;
-    // Canvases in a hidden section have zero width, so draw after they're shown.
+    if (next !== "detail") $("title").textContent = next === "weekly" ? "Weekly review" : next === "backtest" ? "Backtest" : "BursaMusangKing";
+    document.querySelector("main")?.scrollTo(0, 0);
+    if (next === "weekly") renderWeekly();
+    if (next === "backtest") renderBacktest();
     requestAnimationFrame(redraw);
   }
-  document.querySelectorAll("nav button").forEach((b) => {
-    b.onclick = () => { current = null; show(b.dataset.view); };
+  document.querySelectorAll("nav button").forEach((button) => {
+    button.onclick = () => { current = null; show(button.dataset.view); };
   });
+  function redraw() {
+    if (view === "list" && latest) renderList();
+    if (view === "detail" && current) drawDetail($("d-chart"), historyCache[current.symbol] || current.spark);
+    if (view === "weekly" && weekly?.equity_curve?.length > 1) drawLine($("w-chart"), weekly.equity_curve);
+    if (view === "backtest" && backtest) {
+      const eq = btCurrent()?.equity || {};
+      drawLine($("bt-chart"), eq.train || [], eq.test || []);
+    }
+  }
 
-  // ------------------------------------------------------------- run a scan
+  // --------------------------------------------------------------- scan
   $("run").onclick = async () => {
     if (DEMO) {
       banner("Demo mode — set WORKER_URL in config.js to run real scans.", "err");
-      setTimeout(() => banner(null), 4000);
+      setTimeout(() => banner(null), 3500);
       return;
     }
-    const btn = $("run");
-    btn.disabled = true;
+    const button = $("run");
+    button.disabled = true;
     banner("Queuing scan…");
-    const before = latest ? latest.generated_at : null;
-
+    const before = latest?.generated_at || null;
     try {
       const headers = { "Content-Type": "application/json" };
       if (CFG.RUN_TOKEN) headers["X-Run-Token"] = CFG.RUN_TOKEN;
-      const r = await fetch(API + "/run", { method: "POST", headers, body: "{}" });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || j.ok === false) throw new Error(j.detail || j.error || r.status);
-    } catch (e) {
-      banner("Couldn't start the scan: " + e.message, "err");
-      btn.disabled = false;
+      const response = await fetch(API + "/run", { method: "POST", headers, body: "{}" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body.ok === false) throw new Error(body.detail || body.error || response.status);
+    } catch (error) {
+      banner(`Couldn't start the scan: ${error.message}`, "err");
+      button.disabled = false;
       return;
     }
-
-    banner("Scanning the full market — this takes a few minutes. "
-         + "Results refresh automatically.");
+    banner("Scanning the full market. Results refresh automatically.");
     pollForNew(before, Date.now() + (CFG.POLL_SECONDS || 420) * 1000);
   };
-
   function pollForNew(before, deadline) {
     clearTimeout(pollTimer);
-    pollTimer = setTimeout(async () => {
+    const poll = async () => {
       try {
-        const st = await get("/status");
-        if (st.latest && st.latest !== before) {
-          Object.keys(historyCache).forEach((k) => delete historyCache[k]);
-          await loadAll();
-          banner("Scan complete — all screeners updated.");
-          setTimeout(() => banner(null), 4000);
+        const fresh = await get("/latest");
+        if (fresh.generated_at && fresh.generated_at !== before) {
+          latest = fresh;
+          renderChips(); renderList();
+          $("updated").textContent = `Updated ${fmtTime(latest.generated_at)}`;
           $("run").disabled = false;
+          banner(`Scan complete — ${latest.total_hits || latest.stocks?.length || 0} matches.`);
+          setTimeout(() => banner(null), 4000);
           return;
         }
-      } catch { /* keep polling */ }
-
-      if (Date.now() > deadline) {
-        banner("Scan is taking longer than usual. It's still running on "
-             + "GitHub — reload in a few minutes.", "err");
+      } catch (_) { /* retry */ }
+      if (Date.now() >= deadline) {
         $("run").disabled = false;
+        banner("The scan is still running or timed out. Check GitHub Actions.", "err");
         return;
       }
-      pollForNew(before, deadline);
-    }, 10000);
+      pollTimer = setTimeout(poll, 10000);
+    };
+    pollTimer = setTimeout(poll, 8000);
   }
 
-  // ---------------------------------------------------------------- startup
-  if (DEMO) {
-    banner("Demo mode — showing sample data. Set WORKER_URL in config.js "
-         + "to connect your live scans.");
-  }
-  // Run the view switcher once at startup so header controls match the
-  // opening view — otherwise they only settle after the first nav tap.
+  // --------------------------------------------------------------- startup
+  if (DEMO) banner("Demo mode — showing sample data. Set WORKER_URL in config.js to connect live scans.");
   show("list");
   loadAll();
-
-  // Register the shell cache, and reload once when a new worker takes over so
-  // the installed app picks up deploys instead of serving an old shell forever.
   if ("serviceWorker" in navigator) {
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -740,8 +579,6 @@
       reloaded = true;
       location.reload();
     });
-    navigator.serviceWorker.register("sw.js")
-      .then((reg) => reg.update().catch(() => {}))
-      .catch(() => {});
+    navigator.serviceWorker.register("sw.js").then((reg) => reg.update().catch(() => {})).catch(() => {});
   }
 })();

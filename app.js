@@ -109,6 +109,7 @@
       renderChips();
       renderList();
       $("updated").textContent = "Updated " + fmtTime(latest.generated_at);
+      $("scr-controls").hidden = view !== "list";
     } catch (e) {
       banner("Couldn't load scan results. " + e.message, "err");
       $("count").textContent = "";
@@ -654,6 +655,7 @@
     });
     // Both of these sit outside <main>, so they need hiding explicitly.
     $("bt-chips").hidden = v !== "backtest" || !backtest;
+    $("scr-controls").hidden = v !== "list" || !latest;
     $("run").hidden = v !== "list";
     document.querySelectorAll("nav button").forEach((b) => {
       b.classList.toggle("on", b.dataset.view === v ||

@@ -70,13 +70,13 @@ main{flex:1;min-height:0;padding:12px 16px 0;overflow-x:hidden;overflow-y:auto}
    scan button, so there is never a dead band above the nav. */
 #view-list{display:flex;flex-direction:column;height:100%;min-height:0}
 #view-list .scroller{flex:1 1 auto;min-height:0}
-#view-list .chips,#view-list #count,#view-list #updated{flex:0 0 auto}
-#view-list .chips{padding-bottom:12px}
+#view-list #count{flex:0 0 auto}
 .scroller::-webkit-scrollbar{display:none}
 .empty{padding:32px 0;text-align:center;color:var(--muted);font-size:13px}
 
-.chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;
-  padding:8px 0 9px}
+.pinned{flex:0 0 auto;padding:8px 16px 10px;border-top:.5px solid var(--line)}
+.pinned #updated{margin:0 0 7px;text-align:center;font-size:11px}
+.chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
 .chip{font-size:11px;padding:5px 6px;border-radius:var(--radius);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:center;
   border:.5px solid var(--line);color:var(--muted);background:none;cursor:pointer;
@@ -146,8 +146,8 @@ html[data-theme="dark"] .v-warn{color:#e0a94a}
 .exitbar button.on{background:var(--accent-bg);color:var(--accent);
   border-color:transparent;font-weight:600}
 .exitrule{margin:-6px 0 11px;font-size:10.5px;color:var(--faint);line-height:1.45}
-.chipgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;
-  padding:0 0 10px}
+.chipgrid{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:5px;padding:8px 16px 10px;border-top:.5px solid var(--line)}
 .chipgrid .chip{padding:5px 4px;text-align:center;overflow:hidden;
   text-overflow:ellipsis;min-width:0}
 .sortbar{display:flex;gap:5px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
@@ -211,8 +211,6 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
     <section id="view-list">
       <p class="meta" id="count">Loading…</p>
       <div class="scroller"><div id="list"></div></div>
-      <p class="meta" id="updated" style="text-align:center;margin:8px 0"></p>
-      <div class="chips" id="chips"></div>
     </section>
 
     <!-- ============ detail view ============ -->
@@ -288,7 +286,14 @@ nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
     </section>
   </main>
 
-  <div class="chipgrid" id="bt-chips" hidden style="padding-left:16px;padding-right:16px"></div>
+  <!-- Pinned control blocks. These sit OUTSIDE <main> so they hold position
+       regardless of how far the list above is scrolled, or how short it is. -->
+  <div class="pinned" id="scr-controls" hidden>
+    <p class="meta" id="updated"></p>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="chipgrid" id="bt-chips" hidden></div>
 
   <nav>
     <button class="on" data-view="list">

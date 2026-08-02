@@ -290,14 +290,24 @@ def run(top: int = 300, publish: bool = False, mult: float = TRAIL_ATR_MULT) -> 
 
     print(f"got data for {len(data)} symbols")
     split = config.BACKTEST["train_test_split"]
-    enabled = {k: v for k, v in config.STRATEGIES.items()
-               if v.get("enabled", True)}
+
+    # Backtesting is measurement, not trading. A strategy switched off for the
+    # live scan is exactly the one you need numbers for before deciding to
+    # switch it on, so force-enable everything here — `enabled` continues to
+    # gate the live scan and Telegram alerts, and nothing here sends anything.
+    live = {k: bool(v.get("enabled", True)) for k, v in config.STRATEGIES.items()}
+    strategies = {k: {**v, "enabled": True}
+                  for k, v in config.STRATEGIES.items()
+                  if k in screener.CHECKS}
+    off = [k for k, on in live.items() if not on and k in strategies]
+    if off:
+        print(f"including strategies not live in the scan: {', '.join(off)}")
 
     print("replaying with the fixed exit...")
-    fixed_trades = bt_mod.backtest(data)
+    fixed_trades = bt_mod.backtest(data, strategies)
 
     print(f"replaying with the ATR trail ({mult}x)...")
-    atr_trades = _backtest_atr(data, enabled, config.BACKTEST,
+    atr_trades = _backtest_atr(data, strategies, config.BACKTEST,
                                indicators, screener.CHECKS, mult)
 
     fixed_block = _pack("fixed", fixed_trades, bt_mod.summarize, split)
@@ -315,11 +325,12 @@ def run(top: int = 300, publish: bool = False, mult: float = TRAIL_ATR_MULT) -> 
         last = b if last is None or b > last else last
 
     bt = config.BACKTEST
-    strategies = []
-    for strat in enabled:
+    out_strategies = []
+    for strat in strategies:
         f, t = fixed_block.get(strat, {}), atr_block.get(strat, {})
-        strategies.append({"strategy": strat,
-                           "exits": {"fixed": f, "atr": t}})
+        out_strategies.append({"strategy": strat,
+                               "live": live.get(strat, True),
+                               "exits": {"fixed": f, "atr": t}})
         print(f"  {strat}: fixed {f.get('trades_total', 0)} trades "
               f"(PF test {(f.get('test') or {}).get('profit_factor')}), "
               f"atr {t.get('trades_total', 0)} trades "
@@ -349,8 +360,8 @@ def run(top: int = 300, publish: bool = False, mult: float = TRAIL_ATR_MULT) -> 
         "params": {k: v for k, v in bt.items() if k != "train_test_split"},
         "trail_atr_mult": mult,
         "strategy_config": {k: {kk: vv for kk, vv in v.items() if kk != "enabled"}
-                            for k, v in enabled.items()},
-        "strategies": strategies,
+                            for k, v in strategies.items()},
+        "strategies": out_strategies,
         "note": "Entry at next bar's open, stop assumed to fill at the stop "
                 "price, commission both sides. Each exit rule re-enters only "
                 "after its own trade closes, so trade counts differ — longer "

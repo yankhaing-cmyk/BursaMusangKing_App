@@ -11,6 +11,7 @@
     reversal: "Reversal",
     gaining_momentum: "Momentum",
     base_breakout: "Breakout",
+    meta_leader: "META",
   };
 
   const LABELS = {
@@ -19,6 +20,7 @@
     reversal: "Reversal",
     gaining_momentum: "Momentum",
     base_breakout: "Base breakout",
+    meta_leader: "META leader",
   };
 
   let latest = null, weekly = null, backtest = null;
@@ -383,7 +385,12 @@
       };
     });
     const rule = rules.find((r) => r.key === btExit);
-    $("bt-exitrule").textContent = rule ? rule.detail || "" : "";
+    const notLive = strat && strat.live === false;
+    $("bt-exitrule").textContent = (rule ? rule.detail || "" : "")
+      + (notLive
+          ? "  ·  Not live: this strategy is backtested but switched off in "
+            + "config, so it sends no alerts and shows no chip on Screener."
+          : "");
 
     // Strategy chips live at the bottom beside the nav, matching Screener.
     // They sit outside <main>, so nothing hides them when another tab is

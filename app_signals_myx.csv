@@ -548,3 +548,13 @@ date,symbol,strategy,close,rsi,adx,vol_ratio,roc10,is_new
 2026-08-03,TMK,meta_leader,2.57,61.5,30.9,0.44,8.44,False
 2026-08-03,MIKROMB,meta_leader,0.525,57.2,23.5,0.37,2.94,False
 2026-08-03,SPRITZER,meta_leader,3.0,60.6,25.7,0.24,3.45,False
+2026-08-03,ISF,trending,0.645,63.3,25.2,1.38,2.38,True
+2026-08-03,ECOSHOP,trending,1.5,62.2,31.1,0.89,-0.66,False
+2026-08-03,MAHSING,early_uptrend,1.1,79.4,23.1,2.45,15.18,True
+2026-08-03,ABMB,early_uptrend,4.83,56.4,8.1,2.11,1.05,True
+2026-08-03,DATAPRP,reversal,0.07,52.1,35.3,3.24,27.27,False
+2026-08-03,MALAKOF,reversal,0.81,50.3,34.3,1.77,3.85,True
+2026-08-03,LAGENDA,gaining_momentum,1.42,59.3,20.6,2.46,4.41,True
+2026-08-03,MAHSING,gaining_momentum,1.1,79.4,23.1,2.45,15.18,False
+2026-08-03,AMBANK,gaining_momentum,7.03,76.9,16.0,2.26,8.15,False
+2026-08-03,SPRITZER,gaining_momentum,3.0,60.6,25.7,1.89,3.45,False

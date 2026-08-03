@@ -27,18 +27,25 @@ LOOKBACK_WEEKS = 8
 
 
 def forward_returns(sig_date, sig_close: float, df: pd.DataFrame) -> dict:
-    idx = df.index.searchsorted(pd.Timestamp(sig_date))
-    if idx >= len(df):
-        # The signal is stamped later than the last price bar — normal for a
-        # scan run after the close, or on a weekend. There is simply no
-        # forward data yet. Distinguish it from a genuine failure.
-        return {"_pending": True}
-    out = {}
+    # Anchor to the last bar at or BEFORE the signal date — that is the bar
+    # whose close was recorded as sig_close. side="left" anchored to the next
+    # bar at or after, which for a weekend-stamped signal jumped forward to the
+    # following Monday: the horizon was measured from a different day than the
+    # entry price, and two trading days were silently thrown away.
+    idx = df.index.searchsorted(pd.Timestamp(sig_date), side="right") - 1
+    if idx < 0:
+        # Signal predates every bar we hold — history too short, not pending.
+        return {"_no_bar": True}
+
+    matured = len(df) - 1 - idx          # bars available after the anchor
+    out = {"_bars_since": matured}
     for h in HORIZONS:
         j = idx + h
         if j < len(df):
             out[h] = (float(df["close"].iloc[j]) / sig_close - 1) * 100
     out["latest"] = (float(df["close"].iloc[-1]) / sig_close - 1) * 100
+    if not any(h in out for h in HORIZONS):
+        out["_pending"] = True
     return out
 
 
@@ -147,28 +154,36 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
                 "d": pd.Timestamp(row["date"]).strftime("%Y-%m-%d"),
                 "px": round(float(row["close"]), 3),
             }
-            if fr.get("_pending"):
-                pending += 1
-                rec["p"] = True
-                signal_rows.append(rec)
+            if fr.get("_no_bar"):
+                missing += 1
                 continue
-            if not fr:
-                continue
+
+            # How many bars have elapsed — lets the app say "3/5 days" instead
+            # of a bare dash, so a young signal is visibly distinct from a
+            # broken one.
+            rec["bars"] = fr.get("_bars_since")
+            rec["latest"] = round(fr["latest"], 2)
             for h in HORIZONS:
                 rec[f"r{h}"] = round(fr[h], 2) if h in fr else None
-            rec["latest"] = round(fr["latest"], 2)
             rec["p"] = all(rec.get(f"r{h}") is None for h in HORIZONS)
             signal_rows.append(rec)
+
+            if rec["p"]:
+                pending += 1
+                open_rets.append(fr["latest"])
+                continue
+
             evaluated += 1
-            got = False
             for h in HORIZONS:
                 if h in fr:
                     buckets[h].append(fr[h])
-                    got = True
-            if not got:
-                open_rets.append(fr["latest"])
 
-            r10 = fr.get(10, fr["latest"])
+            # Only a genuinely matured +10d return may enter the headline
+            # stats. Falling back to the open return here was making 1-4 day
+            # moves show up as "+10d" win rates, best and worst.
+            if 10 not in fr:
+                continue
+            r10 = fr[10]
             all_r10.append(r10)
             trade_rows.append({"date": pd.Timestamp(row["date"]).strftime("%Y-%m-%d"),
                                "ret": r10})
@@ -289,8 +304,11 @@ def _send_telegram(eng, report: dict):
             if hh:
                 lines.append(f"  +{h}d: {hh['win_rate']}% win | "
                              f"avg {hh['avg']:+.1f}% (n={hh['n']})")
-        lines.append(f"  best {s['best']['symbol']} {s['best']['ret']:+.1f}% | "
-                     f"worst {s['worst']['symbol']} {s['worst']['ret']:+.1f}%")
+        if s["best"]["ret"] is not None and s["worst"]["ret"] is not None:
+            lines.append(f"  best {s['best']['symbol']} {s['best']['ret']:+.1f}% | "
+                         f"worst {s['worst']['symbol']} {s['worst']['ret']:+.1f}%")
+        else:
+            lines.append("  best/worst pending — no +10d return has matured yet")
         lines.append("")
     msg = "\n".join(lines)
     while msg:

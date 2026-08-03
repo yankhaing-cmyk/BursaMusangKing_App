@@ -32,13 +32,13 @@ def forward_returns(sig_date, sig_close: float, df: pd.DataFrame) -> dict:
     # bar at or after, which for a weekend-stamped signal jumped forward to the
     # following Monday: the horizon was measured from a different day than the
     # entry price, and two trading days were silently thrown away.
-    idx = df.index.searchsorted(pd.Timestamp(sig_date), side="right") - 1
+    idx = int(df.index.searchsorted(pd.Timestamp(sig_date), side="right")) - 1
     if idx < 0:
         # Signal predates every bar we hold — history too short, not pending.
         return {"_no_bar": True}
 
     matured = len(df) - 1 - idx          # bars available after the anchor
-    out = {"_bars_since": matured}
+    out = {"_bars_since": int(matured)}
     for h in HORIZONS:
         j = idx + h
         if j < len(df):
@@ -277,9 +277,21 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
     return report
 
 
+def _jsonable(o):
+    """Last-resort coercion for numpy scalars that slip into the report.
+
+    pandas/numpy integers and floats are not JSON-serializable, and a single
+    stray one aborts the whole publish. Better to coerce than to lose the run.
+    """
+    if hasattr(o, "item"):
+        return o.item()
+    raise TypeError(f"{type(o).__name__} is not JSON serializable")
+
+
 def _write(report: dict, publish: bool):
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "weekly.json").write_text(json.dumps(report, separators=(",", ":")))
+    (OUT / "weekly.json").write_text(
+        json.dumps(report, separators=(",", ":"), default=_jsonable))
     print("wrote public/weekly.json")
     if publish:
         from export_scan import publish_files

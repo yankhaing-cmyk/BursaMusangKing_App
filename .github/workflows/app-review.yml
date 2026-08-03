@@ -2,7 +2,7 @@ name: App Weekly Review
 
 on:
   schedule:
-    - cron: "30 10 * * 6"
+    - cron: "0 11 * * 1-5"
   workflow_dispatch:
 
 permissions:

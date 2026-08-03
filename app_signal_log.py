@@ -22,6 +22,20 @@ COLUMNS = ["date", "symbol", "strategy", "close", "rsi", "adx",
            "vol_ratio", "roc10", "is_new"]
 
 
+def last_trading_day(d: datetime | None = None) -> pd.Timestamp:
+    """Snap a run date back to the trading day whose close the scan just read.
+
+    A weekend "Run scan now" tap reads Friday's close but used to stamp the row
+    Saturday. The review then measured the horizon from the wrong bar and threw
+    away two trading days. Bursa holidays still slip through — harmless, since
+    the review now anchors to the last bar at or before this date.
+    """
+    ts = pd.Timestamp((d or datetime.now()).date())
+    while ts.weekday() >= 5:            # 5 = Sat, 6 = Sun
+        ts -= timedelta(days=1)
+    return ts
+
+
 def load_log() -> pd.DataFrame:
     if os.path.exists(LOG_FILE):
         df = pd.read_csv(LOG_FILE)
@@ -36,7 +50,7 @@ def mark_new(hits: dict, now: datetime | None = None) -> dict:
     """Annotate each hit with is_new, using log state BEFORE today's append."""
     now = now or datetime.now()
     log = load_log()
-    today = pd.Timestamp(now.date())
+    today = last_trading_day(now)
     cutoff = today - timedelta(days=NEW_WINDOW_DAYS)
     if log.empty:
         recent_pairs = set()
@@ -53,7 +67,7 @@ def mark_new(hits: dict, now: datetime | None = None) -> dict:
 def append(hits: dict, now: datetime | None = None) -> tuple[int, int]:
     """Append today's hits. Returns (n_logged, n_new). Idempotent per day."""
     now = now or datetime.now()
-    scan_date = pd.Timestamp(now.date())
+    scan_date = last_trading_day(now)
     log = load_log()
 
     if log.empty:

@@ -209,9 +209,9 @@
   }
 
   // ----------------------------------------------------------------- detail
-  async function openDetail(s) {
+  async function openDetail(s, fromHistory) {
     current = s;
-    show("detail");
+    if (fromHistory) applyView("detail"); else go("detail", s.symbol);
     const cur = latest.currency || "";
     const cat = (LABELS[s.strategy] || s.strategy).toUpperCase();
 
@@ -266,7 +266,9 @@
     }
   }
 
-  $("back").onclick = () => { current = null; show("list"); };
+  // Delegating to history means the on-screen arrow and Android's hardware
+  // back button follow the identical path — no chance of them disagreeing.
+  $("back").onclick = () => history.back();
 
   // ----------------------------------------------------------------- weekly
   function renderWeekly() {
@@ -648,7 +650,8 @@
   }
 
   // ------------------------------------------------------------------- nav
-  function show(v) {
+  /** Render a view. Does not touch history — call go() for user navigation. */
+  function applyView(v) {
     view = v;
     ["list", "detail", "weekly", "backtest"].forEach((x) => {
       $("view-" + x).hidden = x !== v;
@@ -672,8 +675,36 @@
     // Canvases in a hidden section have zero width, so draw after they're shown.
     requestAnimationFrame(redraw);
   }
+  /** User navigation: push a history entry, then render. */
+  function go(v, sym) {
+    const st = history.state;
+    // Re-tapping the tab you are already on should not stack duplicate
+    // entries, or back would appear to do nothing several times over.
+    if (st && st.bmk && st.v === v && (st.sym || null) === (sym || null)) {
+      applyView(v);
+      return;
+    }
+    history.pushState({ bmk: 1, v: v, sym: sym || null }, "");
+    applyView(v);
+  }
+
   document.querySelectorAll("nav button").forEach((b) => {
-    b.onclick = () => { current = null; show(b.dataset.view); };
+    b.onclick = () => { current = null; go(b.dataset.view); };
+  });
+
+  // Android's hardware back button, the on-screen arrow and browser gestures
+  // all arrive here. The list view is the base entry, so pressing back there
+  // leaves the app, which is what a user expects from a home screen icon.
+  window.addEventListener("popstate", (e) => {
+    const st = e.state && e.state.bmk ? e.state : { v: "list", sym: null };
+    if (st.v === "detail" && st.sym) {
+      const stock = (latest && latest.stocks || []).find((x) => x.symbol === st.sym);
+      if (stock) { openDetail(stock, true); return; }
+      applyView("list");          // data reloaded since; fall back rather than blank
+      return;
+    }
+    current = null;
+    applyView(st.v || "list");
   });
 
   // ------------------------------------------------------------- run a scan
@@ -737,7 +768,9 @@
   }
   // Run the view switcher once at startup so header controls match the
   // opening view — otherwise they only settle after the first nav tap.
-  show("list");
+  // Base history entry. Back from here exits the app.
+  history.replaceState({ bmk: 1, v: "list", sym: null }, "");
+  applyView("list");
   loadAll();
 
   // Register the shell cache, and reload once when a new worker takes over so

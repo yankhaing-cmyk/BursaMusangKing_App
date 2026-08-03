@@ -2,6 +2,10 @@ name: App Weekly Review
 
 on:
   schedule:
+    # Was "30 10 * * 6" — Saturday only. The Weekly tab therefore froze for
+    # six days at a time, and every signal from the preceding week was still
+    # too young to score at that moment, so the horizon columns stayed blank.
+    # 11:00 UTC = 19:00 MYT, ~100 min after the 09:20 UTC scan.
     - cron: "0 11 * * 1-5"
   workflow_dispatch:
 

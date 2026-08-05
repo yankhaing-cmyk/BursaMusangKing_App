@@ -717,3 +717,11 @@ date,symbol,strategy,close,rsi,adx,vol_ratio,roc10,is_new
 2026-08-05,MIKROMB,meta_leader,0.55,68.9,28.2,1.38,6.8,False
 2026-08-05,SCICOM,meta_leader,2.0,62.4,30.3,1.2,9.89,True
 2026-08-05,MEGAFB,meta_leader,1.89,67.6,26.6,1.03,6.18,False
+2026-08-05,MISC,trending,8.24,61.3,26.0,3.0,4.17,True
+2026-08-05,L&G,trending,0.175,66.2,31.6,1.67,2.94,False
+2026-08-05,SPRITZER,trending,2.99,59.4,25.6,1.18,3.1,False
+2026-08-05,SDG,trending,6.81,73.3,38.9,0.72,3.34,False
+2026-08-05,MNRB,gaining_momentum,2.87,63.9,13.6,9.29,4.74,True
+2026-08-05,NOTION,gaining_momentum,0.54,61.6,24.7,2.35,4.85,False
+2026-08-05,YTLPOWR,meta_leader,4.4,61.3,13.5,1.94,3.53,True
+2026-08-05,SPRITZER,meta_leader,2.99,59.4,25.6,1.18,3.1,False

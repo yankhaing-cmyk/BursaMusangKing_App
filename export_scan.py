@@ -14,6 +14,7 @@ this pipeline to be the one that messages you.
 import argparse
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -244,31 +245,104 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
     return latest
 
 
+def _verify_publish(base: str, name: str, expected: str | None):
+    """Verify that the Worker is serving the same generated_at we just wrote.
+
+    Workers KV can briefly serve an older value in another location after a
+    write, so retry for up to three minutes before declaring the publish bad.
+    """
+    if name not in {"latest", "weekly", "backtest"} or not expected:
+        return
+
+    last = None
+    for attempt in range(18):
+        try:
+            r = requests.get(
+                f"{base}/status",
+                headers={"Cache-Control": "no-cache"},
+                timeout=30,
+            )
+            r.raise_for_status()
+            last = r.json().get(name)
+            print(
+                f"verify {name} attempt {attempt + 1}: "
+                f"expected={expected}, worker={last}"
+            )
+            if last == expected:
+                print(f"publish {name}: VERIFIED")
+                return
+        except Exception as exc:
+            print(f"verify {name} attempt {attempt + 1} failed: {exc}")
+        time.sleep(10)
+
+    raise RuntimeError(
+        f"Publish verification failed for {name}: "
+        f"expected={expected}, worker={last}"
+    )
+
+
 def publish_files(only: tuple[str, ...] | None = None):
-    """POST the JSON blobs to the Cloudflare Worker, which stores them in KV."""
+    """POST JSON blobs to the Worker and fail on any publishing error."""
     base = os.environ.get("WORKER_URL", "").rstrip("/")
     token = os.environ.get("PUBLISH_TOKEN", "")
-    if not base or not token:
-        print("publish skipped: WORKER_URL / PUBLISH_TOKEN not set")
-        return
-    # Tolerate someone pasting a full route into the secret (e.g. .../status)
-    for suffix in ("/status", "/latest", "/weekly", "/history", "/backtest", "/publish"):
+
+    if not base:
+        raise RuntimeError("WORKER_URL is not configured")
+    if not token:
+        raise RuntimeError("PUBLISH_TOKEN is not configured")
+
+    # Tolerate someone pasting a full route into the secret (e.g. .../status).
+    for suffix in (
+        "/status", "/latest", "/weekly", "/history", "/backtest", "/publish"
+    ):
         if base.endswith(suffix):
             base = base[: -len(suffix)]
             print(f"WORKER_URL had '{suffix}' on the end — using {base}")
+            break
+
     keys = only or ("latest", "history", "weekly", "backtest")
+
     for name in keys:
         path = OUT / f"{name}.json"
+
         if not path.exists():
+            if only and name in only:
+                raise FileNotFoundError(
+                    f"Expected publish file does not exist: {path}"
+                )
             continue
+
+        payload = path.read_bytes()
+
+        try:
+            local_json = json.loads(payload)
+        except Exception as exc:
+            raise RuntimeError(f"{path} is not valid JSON") from exc
+
         r = requests.post(
             f"{base}/publish?key={name}",
-            data=path.read_bytes(),
-            headers={"Content-Type": "application/json",
-                     "X-Publish-Token": token},
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "X-Publish-Token": token,
+            },
             timeout=120,
         )
-        print(f"publish {name}: {r.status_code} {r.text[:120]}")
+
+        print(f"publish {name}: {r.status_code} {r.text[:300]}")
+        r.raise_for_status()
+
+        try:
+            result = r.json()
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Worker returned invalid JSON for {name}: {r.text[:300]}"
+            ) from exc
+
+        if result.get("ok") is not True:
+            raise RuntimeError(f"Worker rejected {name}: {result}")
+
+        _verify_publish(base, name, local_json.get("generated_at"))
 
 
 if __name__ == "__main__":

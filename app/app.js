@@ -30,6 +30,7 @@
   const historyCache = {};
   let filter = null, current = null, view = "list";
   let pollTimer = null, resizeTimer = null;
+  let lastForegroundRefresh = 0;
 
   // ------------------------------------------------------------------ theme
   const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -124,6 +125,19 @@
       renderBacktest();
     } catch {
       btEmpty(true);
+    }
+  }
+  async function refreshWeekly(showError = false) {
+    try {
+      weekly = await get("/weekly");
+      renderWeekly();
+      return true;
+    } catch (e) {
+      if (showError) {
+        banner("Couldn't refresh Weekly review. " + e.message, "err");
+        setTimeout(() => banner(null), 5000);
+      }
+      return false;
     }
   }
 
@@ -278,10 +292,10 @@
     $("w-cards").innerHTML = o.trades
       ? card("Win rate", o.win_rate + "%") +
         card("Profit factor", o.profit_factor ?? "–") +
-        card("Signals", o.trades) +
+        card("10d matured", o.trades) +
         card("Worst", o.worst + "%", "down")
       : card("Win rate", "–") + card("Profit factor", "–") +
-        card("Signals", "0") + card("Worst", "–");
+        card("10d matured", "0") + card("Worst", "–");
 
     $("w-curve-label").textContent =
       `Cumulative signal performance · last ${weekly.lookback_weeks} weeks`;
@@ -291,12 +305,15 @@
       const line = (n) => h[n]
         ? `+${n}d: ${h[n].win_rate}% win · avg ${h[n].avg > 0 ? "+" : ""}${h[n].avg}% (n=${h[n].n})`
         : null;
+      const bw = (x) => {
+        if (!x || x.ret == null || !x.symbol) return "pending";
+        return `${esc(x.symbol)} ${x.ret > 0 ? "+" : ""}${x.ret}%`;
+      };
       const parts = [5, 10, 20].map(line).filter(Boolean);
       return `<div class="strat-block">
         <h3>${LABELS[s.strategy] || s.strategy} — ${s.signals} new signals</h3>
         ${parts.map((p) => `<p class="l">${p}</p>`).join("")}
-        <p class="l">best ${esc(s.best.symbol)} ${s.best.ret > 0 ? "+" : ""}${s.best.ret}% ·
-           worst ${esc(s.worst.symbol)} ${s.worst.ret > 0 ? "+" : ""}${s.worst.ret}%</p>
+        <p class="l">best ${bw(s.best)} · worst ${bw(s.worst)}</p>
       </div>`;
     }).join("") || `<p class="empty">${esc(weekly.note
         || "No completed signals yet. Results appear about 5 trading days "
@@ -305,7 +322,10 @@
     // The note used to render twice — once as the empty-state text inside
     // #w-strats and again in #w-note. Show it in exactly one place.
     const hasStrats = (weekly.strategies || []).length > 0;
-    $("w-note").textContent = hasStrats ? (weekly.note || "") : "";
+    const freshness = `Weekly data updated ${fmtTime(weekly.generated_at)}`;
+    $("w-note").textContent = hasStrats
+      ? `${freshness}${weekly.note ? " · " + weekly.note : ""}`
+      : freshness;
     renderSignals();
 
     // An empty canvas still occupies its CSS height, which left a large blank
@@ -599,7 +619,9 @@
 
     const pend = all.filter((x) => x.p).length;
     $("w-sig-title").textContent =
-      `Signals · ${all.length}` + (pend ? ` · ${pend} still pending` : "");
+      `Signals · ${all.length}` +
+      (pend ? ` · ${pend} still pending` : "") +
+      ` · updated ${fmtTime(weekly.generated_at)}`;
 
     $("w-sort").innerHTML = W_SORTS.map(([k, l]) =>
       `<button class="sort${k === wSort ? " on" : ""}" data-s="${k}">${l}</button>`).join("");
@@ -673,7 +695,12 @@
     requestAnimationFrame(redraw);
   }
   document.querySelectorAll("nav button").forEach((b) => {
-    b.onclick = () => { current = null; show(b.dataset.view); };
+    b.onclick = () => {
+      current = null;
+      const next = b.dataset.view;
+      show(next);
+      if (next === "weekly") refreshWeekly(true);
+    };
   });
 
   // ------------------------------------------------------------- run a scan
@@ -729,6 +756,16 @@
       pollForNew(before, deadline);
     }, 10000);
   }
+
+  // Refresh live data when Android/iOS brings an already-open PWA back to
+  // the foreground. Throttle it so quick app-switching does not hammer the API.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || DEMO) return;
+    const now = Date.now();
+    if (now - lastForegroundRefresh < 60000) return;
+    lastForegroundRefresh = now;
+    loadAll();
+  });
 
   // ---------------------------------------------------------------- startup
   if (DEMO) {

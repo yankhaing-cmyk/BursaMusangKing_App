@@ -315,9 +315,16 @@ def publish_files(only: tuple[str, ...] | None = None):
         payload = path.read_bytes()
 
         try:
-            local_json = json.loads(payload)
+            local_json = json.loads(
+                payload,
+                parse_constant=lambda x: (_ for _ in ()).throw(
+                    ValueError(f"non-standard JSON constant: {x}")
+                ),
+            )
         except Exception as exc:
-            raise RuntimeError(f"{path} is not valid JSON") from exc
+            raise RuntimeError(
+                f"{path} is not strict JSON (NaN/Infinity are not allowed): {exc}"
+            ) from exc
 
         r = requests.post(
             f"{base}/publish?key={name}",

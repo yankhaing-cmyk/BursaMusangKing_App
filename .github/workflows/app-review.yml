@@ -1,23 +1,35 @@
 name: App Weekly Review
 
+# Run the review only after App Scan has fully completed, including the signal-log
+# commit. This removes the race between two independent cron schedules.
 on:
-  schedule:
-    # Was "30 10 * * 6" — Saturday only. The Weekly tab therefore froze for
-    # six days at a time, and every signal from the preceding week was still
-    # too young to score at that moment, so the horizon columns stayed blank.
-    # 11:00 UTC = 19:00 MYT, ~100 min after the 09:20 UTC scan.
-    - cron: "0 11 * * 1-5"
+  workflow_run:
+    workflows: ["App Scan"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: app-weekly-review
+  cancel-in-progress: false
+
 jobs:
   review:
+    # A failed scan must not produce a "fresh" review from stale signal data.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout latest default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - uses: actions/setup-python@v5
         with:
@@ -29,7 +41,7 @@ jobs:
           pip install -r requirements.txt
           pip install --upgrade git+https://github.com/rongardF/tvdatafeed.git
 
-      - name: Build and publish review
+      - name: Build, publish and verify review
         env:
           MARKET: ${{ vars.MARKET || 'MYX' }}
           UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO || 'yankhaing-cmyk/BursaMusangKing' }}

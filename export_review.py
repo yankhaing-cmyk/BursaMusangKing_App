@@ -12,6 +12,7 @@ flatter the stats.
 
 import argparse
 import json
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -52,8 +53,11 @@ def forward_returns(sig_date, sig_close: float, df: pd.DataFrame) -> dict:
 def _profit_factor(returns: list[float]) -> float | None:
     gains = sum(r for r in returns if r > 0)
     losses = -sum(r for r in returns if r < 0)
+    # Strict JSON has no Infinity value. When there are gains but no losses,
+    # the mathematical profit factor is infinite; publish null so the app can
+    # display a dash rather than emitting invalid JSON.
     if losses == 0:
-        return None if gains == 0 else float("inf")
+        return None
     return round(gains / losses, 2)
 
 
@@ -277,26 +281,50 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
     return report
 
 
-def _jsonable(o):
-    """Last-resort coercion for numpy scalars that slip into the report.
+def _clean_json(o):
+    """Recursively convert report values to strict JSON-safe primitives.
 
-    pandas/numpy integers and floats are not JSON-serializable, and a single
-    stray one aborts the whole publish. Better to coerce than to lose the run.
+    Python's json module accepts/emits NaN and Infinity by default, but the
+    Cloudflare Worker validates with JavaScript JSON.parse(), which rejects
+    those non-standard constants. Convert every non-finite number to null.
     """
     if hasattr(o, "item"):
-        return o.item()
+        return _clean_json(o.item())
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    if isinstance(o, dict):
+        return {str(k): _clean_json(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_clean_json(v) for v in o]
+    return o
+
+
+def _jsonable(o):
+    """Last-resort coercion for uncommon scalar objects."""
+    if hasattr(o, "item"):
+        return _clean_json(o.item())
     raise TypeError(f"{type(o).__name__} is not JSON serializable")
 
 
 def _write(report: dict, publish: bool):
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "weekly.json").write_text(
-        json.dumps(report, separators=(",", ":"), default=_jsonable))
+    clean = _clean_json(report)
+    payload = json.dumps(
+        clean, separators=(",", ":"), default=_jsonable, allow_nan=False
+    )
+    # Strict local validation before publishing. parse_constant raises if a
+    # non-standard NaN/Infinity token somehow appears despite allow_nan=False.
+    json.loads(
+        payload,
+        parse_constant=lambda x: (_ for _ in ()).throw(
+            ValueError(f"non-standard JSON constant: {x}")
+        ),
+    )
+    (OUT / "weekly.json").write_text(payload)
     print("wrote public/weekly.json")
     if publish:
         from export_scan import publish_files
         publish_files(only=("weekly",))
-
 
 def _send_telegram(eng, report: dict):
     tb = eng["telegram_bot"]

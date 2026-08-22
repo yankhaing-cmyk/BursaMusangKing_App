@@ -9,6 +9,14 @@ this pipeline to be the one that messages you.
   python export_scan.py                 # JSON only
   SEND_TELEGRAM=1 python export_scan.py # JSON + Telegram alert
   python export_scan.py --publish       # also POST the JSON to the Worker
+
+NOTE: modified to use ranked_scan() instead of screener.scan() directly, so
+strategy hit lists (and therefore the app's stock lists / Telegram alerts)
+are sorted strongest-to-weakest by a composite ADX/RSI-band/vol_ratio score
+instead of scan()'s default vol_ratio-only ordering. Nothing is dropped --
+same hits, same dict shape, just reordered. Requires ranked_scan.py to exist
+in the upstream BursaMusangKing repo (it's imported after the clone is on
+sys.path).
 """
 
 import argparse
@@ -154,6 +162,11 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
     indicators = eng["indicators"]
     data_fetcher = eng["data_fetcher"]
 
+    # ranked_scan.py lives in the upstream clone, so it's only importable
+    # after upstream.engine() has put that directory on sys.path (engine()
+    # calls ensure() internally, so this is safe here).
+    from ranked_scan import ranked_scan
+
     if send_telegram is None:
         send_telegram = os.environ.get("SEND_TELEGRAM", "0") == "1"
 
@@ -165,7 +178,7 @@ def run(publish: bool = False, send_telegram: bool | None = None) -> dict:
     screened = len(data)
     print(f"data OK for {screened} symbols, screening...")
 
-    hits = screener.scan(data)
+    hits = ranked_scan(data)
     hits = slog.mark_new(hits)
     n_logged, n_new = slog.append(hits)
     total = sum(len(v) for v in hits.values())
